@@ -51,7 +51,7 @@ RUN curl -sLo ~/miniconda.sh https://repo.continuum.io/miniconda/Miniconda3-py38
 # CUDA 10.2-specific steps
 # RUN conda install -y conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch \
 #     && conda clean -ya
-RUN pip install torch torchvision torchaudio
+RUN pip install torch torchvision torchaudio torchsummary
 
 RUN conda install --yes \
     jupyter \
