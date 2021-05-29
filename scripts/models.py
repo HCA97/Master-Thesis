@@ -1,9 +1,4 @@
 import torch.nn as nn
-import torch.nn.functional as F
-import torch
-
-from pl_bolts.models.gans import GAN
-from pytorch_lightning.core.lightning import LightningModule
 
 from .layers import *
 from .utility import *

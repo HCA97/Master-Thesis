@@ -1,54 +1,19 @@
-import argparse
-import os
-import numpy as np
-import math
+# from argparse import ArgumentParser
 
-import torchvision.transforms as transforms
-from torchvision.utils import save_image
-
-from torch.utils.data import DataLoader
-from torchvision import datasets
-from torch.autograd import Variable
-
-import torch.nn as nn
-import torch.nn.functional as F
-import torch
-from torchsummary import summary
-
+from torch.nn import BCELoss
+import torch as th
+# from torchsummary import summary
+import pytorch_lightning as pl
 
 from scripts.models import *
 from scripts.utility import *
-
-# from pl_bolts.models.gans import DCGAN
-from pytorch_lightning.core.lightning import LightningModule
-import pytorch_lightning as pl
-from pl_bolts.callbacks import LatentDimInterpolator, TensorboardGenerativeModelImageSampler
-from pytorch_lightning import loggers as pl_loggers
-
-
-class MNISTDataModule(pl.LightningModule):
-    def __init__(self, img_size=(32, 32), data_dir="./data/mnist", batch_size=64):
-        super().__init__()
-        self.data_dir = data_dir
-        self.batch_size = batch_size
-        self.img_size = img_size
-        self.dataset = None
-
-    def setup(self, state=None):
-        self.has_setup_fit = True
-        self.dataset = datasets.MNIST(self.data_dir,
-                                      train=True, download=True,
-                                      transform=transforms.Compose([transforms.Resize(self.img_size), transforms.ToTensor(),
-                                                                    transforms.Normalize([0.5], [0.5])]))
-
-    def train_dataloader(self):
-        dataloader = torch.utils.data.DataLoader(
-            self.dataset, batch_size=self.batch_size, shuffle=True)
-        return dataloader
+from scripts.dataloader import *
+from scripts.callbacks import *
 
 
 class GAN(pl.LightningModule):
-    """My Gan module because I find `pl_bolt` implementation confusing.
+    """My Gan module because I find ``pl_bolts`` implementation confusing.
+    It is based on https://lightning-bolts.readthedocs.io/en/latest/gans.html#basic-gan
 
     Parameters
     ----------
@@ -64,7 +29,7 @@ class GAN(pl.LightningModule):
         self.criterion = self.get_criterion()
 
     def get_criterion(self):
-        return nn.BCELoss()
+        return BCELoss()
 
     def get_generator(self, img_dim):
         generator = BasicGenerator(img_dim, self.hparams.latent_dim)
@@ -79,17 +44,18 @@ class GAN(pl.LightningModule):
     def configure_optimizers(self):
         lr = self.hparams.learning_rate
         betas = self.hparams.betas
-        opt_disc = torch.optim.Adam(
+        opt_disc = th.optim.Adam(
             self.discriminator.parameters(), lr=lr, betas=betas)
-        opt_gen = torch.optim.Adam(
+        opt_gen = th.optim.Adam(
             self.generator.parameters(), lr=lr, betas=betas)
         return [opt_disc, opt_gen], []
 
-    def forward(self, noise: torch.Tensor) -> torch.Tensor:
+    def forward(self, noise: th.Tensor) -> th.Tensor:
         """
         Generates an image given input noise
+
         Example::
-            noise = torch.rand(batch_size, latent_dim)
+            noise = th.rand(batch_size, latent_dim)
             gan = GAN.load_from_checkpoint(PATH)
             img = gan(noise)
         """
@@ -97,108 +63,112 @@ class GAN(pl.LightningModule):
         return self.generator(noise)
 
     def training_step(self, batch, batch_idx, optimizer_idx):
-
-        # print(self.logger.experiment)
-        print(self.log)
         real, _ = batch
 
         # Train discriminator
         result = None
         if optimizer_idx == 0:
-            result = self._disc_step(real)
+            result = self.disc_step(real)
 
         # Train generator
         if optimizer_idx == 1:
-            result = self._gen_step(real)
+            result = self.gen_step(real)
 
         return result
 
-    def dics_step(self, real: torch.Tensor) -> torch.Tensor:
+    def disc_step(self, real: th.Tensor) -> th.Tensor:
         # Train with real
         real_pred = self.discriminator(real)
-        real_gt = torch.ones_like(real_pred)
+        real_gt = th.ones_like(real_pred)
         real_loss = self.criterion(real_pred, real_gt)
 
         # Train with fake
-        fake_pred = self._get_fake_pred(real)
-        fake_gt = torch.zeros_like(fake_pred)
+        fake_pred = self.get_pred_fake(real)
+        fake_gt = th.zeros_like(fake_pred)
         fake_loss = self.criterion(fake_pred, fake_gt)
 
+        # Total Loss
         disc_loss = real_loss + fake_loss
 
         # Logging
-        self.log("loss/disc", disc_loss, on_epoch=True)
-        self.log("loss/disc_real", real_loss, on_epoch=True)
-        self.log("loss/disc_fake", fake_loss, on_epoch=True)
+        self.log("loss/disc", disc_loss)
+        self.log("loss/disc_real", real_loss)
+        self.log("loss/disc_fake", fake_loss)
 
         return disc_loss
 
-    def _disc_step(self, real: torch.Tensor) -> torch.Tensor:
-        disc_loss = self._get_disc_loss(real)
-        self.log("loss/disc", disc_loss, on_epoch=True)
-        return disc_loss
+    def get_pred_fake(self, real: th.Tensor) -> th.Tensor:
+        noise = th.normal(mean=0.0, std=1.0, size=(
+            len(real), self.hparams.latent_dim, 1, 1), device=self.device)
+        fake = self.generator(noise)
+        return self.discriminator(fake)
 
-    def _gen_step(self, real: torch.Tensor) -> torch.Tensor:
-        gen_loss = self._get_gen_loss(real)
-        self.log("loss/gen", gen_loss, on_epoch=True)
-        return gen_loss
+    def gen_step(self, real: th.Tensor) -> th.Tensor:
 
-    def _get_disc_loss(self, real: torch.Tensor) -> torch.Tensor:
-        # Train with real
-        real_pred = self.discriminator(real)
-        real_gt = torch.ones_like(real_pred)
-        real_loss = self.criterion(real_pred, real_gt)
+        fake_pred = self.get_pred_fake(real)
+        fake_gt = th.ones_like(fake_pred)
 
-        # Train with fake
-        fake_pred = self._get_fake_pred(real)
-        fake_gt = torch.zeros_like(fake_pred)
-        fake_loss = self.criterion(fake_pred, fake_gt)
-
-        disc_loss = real_loss + fake_loss
-
-        return disc_loss
-
-    def _get_gen_loss(self, real: torch.Tensor) -> torch.Tensor:
-        # Train with fake
-        fake_pred = self._get_fake_pred(real)
-        fake_gt = torch.ones_like(fake_pred)
         gen_loss = self.criterion(fake_pred, fake_gt)
 
+        self.log("loss/gen", gen_loss)
         return gen_loss
 
-    def _get_fake_pred(self, real: torch.Tensor) -> torch.Tensor:
-        batch_size = len(real)
-        noise = self._get_noise(batch_size, self.hparams.latent_dim)
-        fake = self.generator(noise)
-        fake_pred = self.discriminator(fake)
+    def on_epoch_end(self):
 
-        return fake_pred
+        # save weights
+        writer = self.logger.experiment
 
-    def _get_noise(self, n_samples: int, latent_dim: int) -> torch.Tensor:
-        return torch.randn(n_samples, latent_dim, device=self.device)
+        with th.no_grad():
+            for name, params in self.generator.named_parameters():
+                if params.grad is not None:
+                    writer.add_histogram(
+                        "Generator/" + name, params.detach().cpu().numpy(), self.global_step)
+            for name, params in self.discriminator.named_parameters():
+                if params.grad is not None:
+                    writer.add_histogram(
+                        "Discriminator/" + name, params.detach().cpu().numpy(), self.global_step)
 
     # @staticmethod
-    # def add_model_specific_args(parent_parser: ) -> ArgumentParser:
+    # def add_model_specific_args(parent_parser: ArgumentParser) -> ArgumentParser:
     #     parser = ArgumentParser(parents=[parent_parser], add_help=False)
     #     parser.add_argument("--beta1", default=0.5, type=float)
-    #     parser.add_argument("--feature_maps_gen", default=64, type=int)
+    #     parser.add_argument("--beta2", default=0.999, type=float)
+    #     parser.add_argument("--n_channels", default=1, type=int)
+    #     parser.add_argument("--img_width", default=32, type=int)
+    #     parser.add_argument("--img_dim", default=(1, 32, 32), type=int)
     #     parser.add_argument("--feature_maps_disc", default=64, type=int)
     #     parser.add_argument("--latent_dim", default=100, type=int)
     #     parser.add_argument("--learning_rate", default=0.0002, type=float)
     #     return parser
 
 
-model = GAN((1, 32, 32))
-mnist = MNISTDataModule()
-mnist.setup()
+# MNIST TEST EXAMPLE
+# model = GAN((1, 32, 32))
+# mnist = MNISTDataModule(batch_size=128)
+# mnist.setup()
 
-tb_logger = pl_loggers.TensorBoardLogger('logs/')
+# callbacks = [
+#     TensorboardGeneratorSampler(num_samples=64),
+#     LatentDimInterpolator(interpolate_epoch_interval=1)]
+
+# # Apparently Trainer has logger by default
+# trainer = pl.Trainer(default_root_dir="logs", gpus=1, max_epochs=1,
+#                      callbacks=callbacks, progress_bar_refresh_rate=20)
+# trainer.fit(model, datamodule=mnist)
+
+
+# POTSDAM CARS
+model = GAN((3, 32, 64))
+# print(summary(model.discriminator.cuda(), (3, 32, 64)))
+# print(summary(model.generator.cuda(), (100, 1, 1)))
+potsdam = PostdamCarsDataModule("../potsdam_data/potsdam_cars", batch_size=64)
+potsdam.setup()
 
 callbacks = [
-    TensorboardGenerativeModelImageSampler(num_samples=16),
-    LatentDimInterpolator(interpolate_epoch_interval=1),
+    TensorboardGeneratorSampler(num_samples=64),
+    LatentDimInterpolator(interpolate_epoch_interval=1)]
 
-]
-trainer = pl.Trainer(logger=tb_logger, gpus=1,
+# Apparently Trainer has logger by default
+trainer = pl.Trainer(default_root_dir="logs", gpus=1, max_epochs=5,
                      callbacks=callbacks, progress_bar_refresh_rate=20)
-trainer.fit(model, datamodule=mnist)
+trainer.fit(model, datamodule=potsdam)
