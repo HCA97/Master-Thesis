@@ -158,7 +158,9 @@ class GAN(pl.LightningModule):
 
 
 # POTSDAM CARS
-model = GAN((3, 32, 64))
+# model = GAN((3, 32, 64))
+model = GAN.load_from_checkpoint(
+    "logs/lightning_logs/version_9/checkpoints/epoch=9-step=659.ckpt")
 # print(summary(model.discriminator.cuda(), (3, 32, 64)))
 # print(summary(model.generator.cuda(), (100, 1, 1)))
 potsdam = PostdamCarsDataModule("../potsdam_data/potsdam_cars", batch_size=64)

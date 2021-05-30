@@ -7,71 +7,6 @@ import scipy.ndimage as nd
 import numpy as np
 
 
-def subimage(img, img_filtered, center, theta, width, height):
-    ''' 
-    Rotates OpenCV image around center with angle theta (in deg)
-    then crops the image according to width and height.
-
-    Reference: 
-    https://stackoverflow.com/questions/11627362/how-to-straighten-a-rotated-rectangle-area-of-an-image-using-opencv-in-python
-    '''
-
-    # Uncomment for theta in radians
-    #theta *= 180/np.pi
-
-    image = img.copy()
-    image_filtered = img_filtered.copy()
-
-    # cv2.warpAffine expects shape in (length, height)
-    shape = (image.shape[1], image.shape[0])
-
-    matrix = cv2.getRotationMatrix2D(center=center, angle=theta, scale=1)
-    image = cv2.warpAffine(src=image, M=matrix, dsize=shape)
-    image_filtered = cv2.warpAffine(src=image_filtered, M=matrix, dsize=shape)
-
-    x = int(center[0] - width/2)
-    y = int(center[1] - height/2)
-
-    image = image[y:y+height, x:x+width]
-    image_filtered = image_filtered[y:y+height, x:x+width]
-
-    # my part
-    # create binary image
-    mask = (image_filtered[:, :, 0] != 0) & (
-        image_filtered[:, :, 1] != 0) & (image_filtered[:, :, 2] != 0)
-    connected_components, _ = nd.label(mask)
-    r, c = connected_components.shape
-    label_id = connected_components[r//2, c//2]
-    if label_id != 0:
-        mask = connected_components == label_id
-    px, py = np.where(mask != 0)
-    x_max, x_min = np.max(px), np.min(px)
-    y_max, y_min = np.max(py), np.min(py)
-
-    chunk = image[x_min:x_max, y_min:y_max, :].copy()
-    del(image)  # somehow there is a memory leak
-    return chunk
-
-
-def get_tilt(coord):
-    """Returns the orientation of the bbox."""
-
-    # index 0 is the top left corner
-    d = np.linalg.norm(coord[0] - coord, axis=1)
-    idx_second_longest = d.argsort()[-2]
-
-    # get direction vector
-    vec = np.array(coord[idx_second_longest] - coord[0], dtype=float)
-    vec /= np.linalg.norm(vec)
-
-    # align all the car respect to x axis
-    ang = np.arccos(vec.dot([1, 0])) * 180 / np.pi
-    pos = np.sign(np.cross([1, 0], vec))
-    ang = pos*ang
-
-    return ang
-
-
 def load_images_cv(path, filter_car=False):
     """Load images using opencv which is much faster than PIL"""
     ret = cv2.imread(path)
@@ -106,15 +41,81 @@ def load_cars_bbox_potsdam(path):
     return coords
 
 
-def crop_cars(img, img_filtered, coords, buffer=5, min_height=20, area_threshold=0.9, ratio_threshold=2):
+def get_tilt(coord):
+    """Returns the orientation of the bbox."""
+
+    # index 0 is the top left corner
+    d = np.linalg.norm(coord[0] - coord, axis=1)
+    idx_second_longest = d.argsort()[-2]
+
+    # get direction vector
+    vec = np.array(coord[idx_second_longest] - coord[0], dtype=float)
+    vec /= np.linalg.norm(vec)
+
+    # align all the car respect to x axis
+    ang = np.arccos(vec.dot([1, 0])) * 180 / np.pi
+    pos = np.sign(np.cross([1, 0], vec))
+    ang = pos*ang
+
+    return ang
+
+
+def crop_car(img, coord, buffer=5):
+    ''' 
+    Rotates OpenCV image around center with angle theta (in deg)
+    then crops the image according to width and height.
+
+    Reference: 
+    https://stackoverflow.com/questions/11627362/how-to-straighten-a-rotated-rectangle-area-of-an-image-using-opencv-in-python
+    '''
+
+    image = img.copy()
+
+    # bbox
+    r, c, _ = image.shape
+    x_min, x_max = max(0, coord[:, 0].min() -
+                       buffer), min(r, coord[:, 0].max() + buffer)
+    y_min, y_max = max(0, coord[:, 1].min() -
+                       buffer), min(c, coord[:, 1].max() + buffer)
+    cx, cy = (x_max + x_min)//2, (y_min + y_max)//2
+    angle = get_tilt(coord)
+
+    # cv2.warpAffine expects shape in (length, height)
+    shape = (image.shape[1], image.shape[0])
+
+    orig = image[x_min:x_max, y_min:y_max, :].copy()
+
+    matrix = cv2.getRotationMatrix2D(center=(cx, cy), angle=angle, scale=1)
+    image = cv2.warpAffine(image, M=matrix, dsize=shape)
+
+    # rotate bbox
+    coord_rot = coord.dot(matrix).astype(np.int64)
+    print("rot", coord_rot)
+    print("m", matrix)
+    print("c", cx, cy)
+    print("coor", coord)
+
+    # crop image and delete image
+    x_min, x_max = max(0, coord_rot[:, 0].min() -
+                       buffer), min(r, coord_rot[:, 0].max() + buffer)
+    y_min, y_max = max(0, coord_rot[:, 1].min() -
+                       buffer), min(c, coord_rot[:, 1].max() + buffer)
+    chunk = image[x_min:x_max, y_min:y_max, :].copy()
+
+    del image
+
+    # return subimage
+    return orig, chunk
+
+
+def crop_cars(img, coords, buffer=5, min_height=20, area_threshold=0.9, ratio_threshold=2):
     """Crops cars given list of bbox."""
 
     cars_succeed = []
     cars_failed = []
     for coord in coords:
         try:
-            car_original, car_aligned = crop_car(
-                img, img_filtered, coord, buffer)
+            car_original, car_aligned = crop_car(img, coord, buffer)
             r, c, _ = car_aligned.shape
             car_area = np.sum((car_aligned[:, :, 0] != 0) &
                               (car_aligned[:, :, 1] != 0) &
@@ -131,33 +132,10 @@ def crop_cars(img, img_filtered, coords, buffer=5, min_height=20, area_threshold
                 raise RuntimeError(
                     f"Aspect ratio of car is not correct rows ({r}) and cols ({c})")
             cars_succeed.append(car_aligned)
-        except Exception:
+        except RuntimeError:
             cars_failed.append(car_aligned)
 
     return cars_succeed, cars_failed
-
-
-def crop_car(img, img_filtered, coord, buffer=5):
-    """Crops a car given a bbox."""
-    ang = get_tilt(coord)
-    r, c, _ = img.shape
-
-    # bbox
-    x_min, x_max = max(0, coord[:, 0].min() -
-                       buffer), min(r, coord[:, 0].max() + buffer)
-    y_min, y_max = max(0, coord[:, 1].min() -
-                       buffer), min(c, coord[:, 1].max() + buffer)
-
-    # aligned car
-    w, h = x_max - x_min, y_max - y_min
-    cx, cy = (x_max + x_min)//2, (y_min + y_max)//2
-    car_aligned = subimage(img, img_filtered, (cx, cy),
-                           ang, max(w, h), min(h, w))
-
-    # original car
-    car_original = img[y_min:y_max, x_min:x_max, :]
-
-    return car_original, car_aligned
 
 
 def save_cars(cars, cars_path):
@@ -251,12 +229,29 @@ def return_potsdam_cars(data_path, buffer=5, min_height=20, area_threshold=0.9, 
         print(f"::Total number of unique cars => {len(coords)}")
 
         succeed, failed = crop_cars(
-            img, img_filtered, coords, buffer, min_height, area_threshold, ratio_threshold)
+            img, coords, buffer, min_height, area_threshold, ratio_threshold)
 
         cars_succeed += succeed
         cars_failed += failed
         print("-----"*10)
+        break
 
     print(
         f"::{len(cars_succeed)} cars are succeed and {len(cars_failed)} cars are failed.")
     return cars_succeed, cars_failed
+
+
+data_path = "../potsdam_data/training"
+potsdam_cars_succeed, potsdam_cars_failed = return_potsdam_cars(
+    data_path, area_threshold=0.88)
+
+# succeed cars
+if potsdam_cars_succeed:
+    cars_path = os.path.join(os.path.split(data_path)[0], "potsdam_cars")
+    save_cars(potsdam_cars_succeed, cars_path)
+
+# failed cars
+if potsdam_cars_failed:
+    cars_path = os.path.join(os.path.split(data_path)[
+                             0], "potsdam_cars_failed")
+    save_cars(potsdam_cars_failed, cars_path)
