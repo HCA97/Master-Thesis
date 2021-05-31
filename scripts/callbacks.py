@@ -92,17 +92,19 @@ class LatentDimInterpolator(Callback):
         points[-1] = p2
 
         for i, ratio in enumerate(ratios):
+            noise = (1 - ratio) * p1 + ratio * p2
+
             if self.use_slerp:
                 p1_ = p1/(th.linalg.norm(p1) + 1e-10)
                 p2_ = p2/(th.linalg.norm(p2) + 1e-10)
 
                 omega = th.acos(th.clip(th.dot(p1_, p2_), -1, 1))
                 if not th.isclose(th.sin(omega), th.zeros(1, device=pl_module.device)):
-                    points[i+1] = (th.sin((1 - ratio)*omega) * p1 +
-                                   th.sin(ratio*omega) * p2) / th.sin(omega)
-                    continue
+                    noise = (th.sin((1 - ratio)*omega) * p1 +
+                             th.sin(ratio*omega) * p2) / th.sin(omega)
+
             # linear interpolation if omega -> 0 than it behaves like linear interpolation
-            points[i+1] = (1 - ratio) * p1 + ratio * p2
+            points[i+1] = noise
         return points
 
 

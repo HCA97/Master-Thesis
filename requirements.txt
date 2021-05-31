@@ -1,0 +1,14 @@
+torch==1.7.1
+torchaudio==0.7.2
+torchmetrics==0.2.0
+torchsummary==1.5.1
+pytorch-lightning==1.2.10
+torchvision==0.8.2
+tqdm==4.46.1
+Pillow==7.1.2
+easing-functions==1.0.4
+opencv-python==4.2.0.34
+numpy==1.19.4
+scikit-image==0.17.2
+ipython==7.15.0
+tensorboard==2.4.1
