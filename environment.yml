@@ -1,4 +1,4 @@
-name : fast-gan
+name : master-thesis
 dependencies:
     - python=3.8
     - pip
