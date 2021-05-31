@@ -43,9 +43,10 @@ potsdam = PostdamCarsDataModule(data_dir, batch_size=batch_size)
 potsdam.setup()
 
 callbacks = [
-    TensorboardGeneratorSampler(num_samples=batch_size),
-    LatentDimInterpolator(interpolate_epoch_interval=1, num_samples=10),
-    ModelCheckpoint(period=1, save_top_k=-1, filename="{epoch}")
+    TensorboardGeneratorSampler(
+        epoch_interval=5, num_samples=batch_size, normalize=True),
+    LatentDimInterpolator(interpolate_epoch_interval=5, num_samples=10),
+    ModelCheckpoint(period=5, save_top_k=-1, filename="{epoch}")
 ]
 
 # Apparently Trainer has logger by default
