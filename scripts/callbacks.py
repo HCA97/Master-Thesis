@@ -31,10 +31,12 @@ class LatentDimInterpolator(Callback):
         self.normalize = normalize
         self.steps = steps
         self.use_slerp = use_slerp
+        self.init_noise = False
 
     def on_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
 
         if (trainer.current_epoch + 1) % self.interpolate_epoch_interval == 0:
+
             images = self.interpolate_latent_space(
                 pl_module,
                 # type: ignore[union-attr]
@@ -43,12 +45,11 @@ class LatentDimInterpolator(Callback):
             # images = th.cat(images, dim=0)  # type: ignore[assignment]
 
             num_rows = self.steps + 2
-            num_cols = self.num_samples
             grid = torchvision.utils.make_grid(
                 images, nrow=num_rows, normalize=self.normalize)
             str_title = f'{pl_module.__class__.__name__}_latent_space'
             trainer.logger.experiment.add_image(
-                str_title, grid, global_step=trainer.global_step)
+                str_title, grid, global_step=trainer.current_epoch)
 
     def interpolate_latent_space(self, pl_module: LightningModule, latent_dim: int) -> List[Tensor]:
         images = []
@@ -56,10 +57,15 @@ class LatentDimInterpolator(Callback):
         with th.no_grad():
             pl_module.eval()
 
-            z1 = th.normal(mean=0, std=1, size=(
-                self.num_samples, latent_dim), device=pl_module.device)
-            z2 = th.normal(mean=0, std=1, size=(
-                self.num_samples, latent_dim), device=pl_module.device)
+            if not self.init_noise:
+                self.init_noise = True
+                self.z1 = th.normal(
+                    mean=0, std=1, size=(self.num_samples, latent_dim), device=pl_module.device)
+                self.z2 = th.normal(mean=0, std=1, size=(
+                    self.num_samples, latent_dim), device=pl_module.device)
+
+            z1 = self.z1.clone().detach()
+            z2 = self.z2.clone().detach()
 
             for i in range(self.num_samples):
                 # interpolate points
@@ -77,7 +83,7 @@ class LatentDimInterpolator(Callback):
         return images
 
     def interpolate(self, p1: Tensor, p2: Tensor, pl_module: LightningModule) -> Tensor:
-        """Interpolation of two latent points. 
+        """Interpolation of two latent points.
 
         References
         ----------
@@ -92,6 +98,7 @@ class LatentDimInterpolator(Callback):
         points[-1] = p2
 
         for i, ratio in enumerate(ratios):
+            # linear interpolation if omega -> 0 than it behaves like linear interpolation
             noise = (1 - ratio) * p1 + ratio * p2
 
             if self.use_slerp:
@@ -103,7 +110,6 @@ class LatentDimInterpolator(Callback):
                     noise = (th.sin((1 - ratio)*omega) * p1 +
                              th.sin(ratio*omega) * p2) / th.sin(omega)
 
-            # linear interpolation if omega -> 0 than it behaves like linear interpolation
             points[i+1] = noise
         return points
 
@@ -129,6 +135,7 @@ class TensorboardGeneratorSampler(Callback):
 
     def __init__(
         self,
+        epoch_interval: int = 5,
         num_samples: int = 18,
         nrow: int = 8,
         padding: int = 2,
@@ -159,32 +166,38 @@ class TensorboardGeneratorSampler(Callback):
         super().__init__()
         self.num_samples = num_samples
         self.nrow = nrow
+        self.epoch_interval = epoch_interval
         self.padding = padding
         self.normalize = normalize
         self.norm_range = norm_range
         self.scale_each = scale_each
         self.pad_value = pad_value
+        self.z = None
 
     def on_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         # type: ignore[union-attr]
-        dim = (self.num_samples, pl_module.hparams.latent_dim, 1, 1)
-        z = th.normal(mean=0.0, std=1.0, size=dim, device=pl_module.device)
 
-        # generate images
-        with th.no_grad():
-            pl_module.eval()
-            images = pl_module(z)
-            pl_module.train()
+        if (trainer.current_epoch + 1) % self.epoch_interval == 0:
+            dim = (self.num_samples, pl_module.hparams.latent_dim, 1, 1)
+            if self.z is None:
+                self.z = th.normal(mean=0.0, std=1.0, size=dim,
+                                   device=pl_module.device)
 
-        grid = torchvision.utils.make_grid(
-            tensor=images,
-            nrow=self.nrow,
-            padding=self.padding,
-            normalize=self.normalize,
-            range=self.norm_range,
-            scale_each=self.scale_each,
-            pad_value=self.pad_value,
-        )
-        str_title = f"{pl_module.__class__.__name__}_images"
-        trainer.logger.experiment.add_image(
-            str_title, grid, global_step=trainer.global_step)
+            # generate images
+            with th.no_grad():
+                pl_module.eval()
+                images = pl_module(self.z)
+                pl_module.train()
+
+            grid = torchvision.utils.make_grid(
+                tensor=images,
+                nrow=self.nrow,
+                padding=self.padding,
+                normalize=self.normalize,
+                range=self.norm_range,
+                scale_each=self.scale_each,
+                pad_value=self.pad_value,
+            )
+            str_title = f"{pl_module.__class__.__name__}_images"
+            trainer.logger.experiment.add_image(
+                str_title, grid, global_step=trainer.current_epoch)
