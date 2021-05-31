@@ -5,6 +5,7 @@ import json
 import cv2
 import scipy.ndimage as nd
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def load_images_cv(path, filter_car=False):
@@ -41,6 +42,18 @@ def load_cars_bbox_potsdam(path):
     return coords
 
 
+def get_bbox(coord, buffer, img_shape):
+
+    r, c = img_shape[:2]
+
+    x_min, x_max = max(0, coord[:, 0].min() -
+                       buffer), min(r, coord[:, 0].max() + buffer)
+    y_min, y_max = max(0, coord[:, 1].min() -
+                       buffer), min(c, coord[:, 1].max() + buffer)
+
+    return x_min, x_max, y_min, y_max
+
+
 def get_tilt(coord):
     """Returns the orientation of the bbox."""
 
@@ -50,6 +63,8 @@ def get_tilt(coord):
 
     # get direction vector
     vec = np.array(coord[idx_second_longest] - coord[0], dtype=float)
+    if np.isclose(np.linalg.norm(vec), 0):
+        raise RuntimeError
     vec /= np.linalg.norm(vec)
 
     # align all the car respect to x axis
@@ -72,70 +87,29 @@ def crop_car(img, coord, buffer=5):
     image = img.copy()
 
     # bbox
-    r, c, _ = image.shape
-    x_min, x_max = max(0, coord[:, 0].min() -
-                       buffer), min(r, coord[:, 0].max() + buffer)
-    y_min, y_max = max(0, coord[:, 1].min() -
-                       buffer), min(c, coord[:, 1].max() + buffer)
+    x_min, x_max, y_min, y_max = get_bbox(coord, buffer, image.shape)
     cx, cy = (x_max + x_min)//2, (y_min + y_max)//2
     angle = get_tilt(coord)
 
     # cv2.warpAffine expects shape in (length, height)
     shape = (image.shape[1], image.shape[0])
 
-    orig = image[x_min:x_max, y_min:y_max, :].copy()
+    orig = image[y_min:y_max, x_min:x_max, :].copy()
 
     matrix = cv2.getRotationMatrix2D(center=(cx, cy), angle=angle, scale=1)
     image = cv2.warpAffine(image, M=matrix, dsize=shape)
 
     # rotate bbox
-    coord_rot = coord.dot(matrix).astype(np.int64)
-    print("rot", coord_rot)
-    print("m", matrix)
-    print("c", cx, cy)
-    print("coor", coord)
+    coord_rot = (coord.dot(matrix[:, :2].T) + matrix[:, -1]).astype(np.int64)
 
     # crop image and delete image
-    x_min, x_max = max(0, coord_rot[:, 0].min() -
-                       buffer), min(r, coord_rot[:, 0].max() + buffer)
-    y_min, y_max = max(0, coord_rot[:, 1].min() -
-                       buffer), min(c, coord_rot[:, 1].max() + buffer)
-    chunk = image[x_min:x_max, y_min:y_max, :].copy()
+    x_min, x_max, y_min, y_max = get_bbox(coord_rot, buffer, image.shape)
+    chunk = image[y_min:y_max, x_min:x_max, :].copy()
 
     del image
 
     # return subimage
     return orig, chunk
-
-
-def crop_cars(img, coords, buffer=5, min_height=20, area_threshold=0.9, ratio_threshold=2):
-    """Crops cars given list of bbox."""
-
-    cars_succeed = []
-    cars_failed = []
-    for coord in coords:
-        try:
-            car_original, car_aligned = crop_car(img, coord, buffer)
-            r, c, _ = car_aligned.shape
-            car_area = np.sum((car_aligned[:, :, 0] != 0) &
-                              (car_aligned[:, :, 1] != 0) &
-                              (car_aligned[:, :, 2] != 0))
-            background_area = r*c
-            if r < min_height:
-                raise RuntimeError(f"Image height is short ({r}))")
-            elif r == 0 or c == 0:
-                raise RuntimeError(f"Image has empty rows ({r}) or cols ({c})")
-            elif car_area / background_area < area_threshold:
-                raise RuntimeError(
-                    f"Mask of car is not complete, ratio of car and background is {car_area / (r*c)}")
-            elif c < ratio_threshold*r:
-                raise RuntimeError(
-                    f"Aspect ratio of car is not correct rows ({r}) and cols ({c})")
-            cars_succeed.append(car_aligned)
-        except RuntimeError:
-            cars_failed.append(car_aligned)
-
-    return cars_succeed, cars_failed
 
 
 def save_cars(cars, cars_path):
@@ -152,7 +126,7 @@ def save_cars(cars, cars_path):
         cv2.imwrite(car_path, car)
 
 
-def return_artificial_cars(json_file, buffer=5, min_height=20, area_threshold=0.9, ratio_threshold=2):
+def return_artificial_cars(json_file, buffer=5):
     root = os.path.split(json_file)[0]
 
     cars_succeed = []
@@ -170,21 +144,17 @@ def return_artificial_cars(json_file, buffer=5, min_height=20, area_threshold=0.
                     coords.append(
                         np.array(polygon["coordinates"][0][:-1], dtype=int))
 
-            img_path = os.path.join(root, annotation["image_filename"])
+            rgb_path = os.path.join(root, annotation["image_filename"])
 
             print(f"::Reading RBG => {rgb_path}")
-            print(f"::Total number of unique cars => {len(coords)}")
 
-            img = load_images_cv(img_path)
-            succeed, failed = crop_cars(
-                img, img, coords, buffer, min_height, area_threshold, ratio_threshold)
-
-            cars_succeed += succeed
-            cars_failed += failed
+            img = load_images_cv(rgb_path)
+            cars_succeed += [crop_car(img, coord, buffer)[1]
+                             for coord in coords]
             print("-----"*10)
 
     print(
-        f"::{len(cars_succeed)} cars are succeed and {len(cars_failed)} cars are failed.")
+        f"::Total number of cars are {len(cars_succeed)}.")
     return cars_succeed, cars_failed
 
 
@@ -223,35 +193,88 @@ def return_potsdam_cars(data_path, buffer=5, min_height=20, area_threshold=0.9, 
 
         mask = load_images_cv(label_path, True)
         img = load_images_cv(rgb_path, False)
-        img_filtered = img * mask[:, :, None]
 
         coords = load_cars_bbox_potsdam(annot_path)
         print(f"::Total number of unique cars => {len(coords)}")
 
-        succeed, failed = crop_cars(
-            img, coords, buffer, min_height, area_threshold, ratio_threshold)
+        for coord in coords:
+            try:
+                car_original, car_aligned = crop_car(img, coord, buffer)
 
-        cars_succeed += succeed
-        cars_failed += failed
+                x_min, x_max, y_min, y_max = get_bbox(
+                    coord, buffer, mask.shape)
+                car_mask = mask[y_min:y_max, x_min:x_max]
+                r, c, _ = car_aligned.shape
+
+                cnts, _ = cv2.findContours(car_mask.astype(
+                    np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                idx = np.argmax([len(cnt) for cnt in cnts])
+                peri = cv2.arcLength(cnts[idx], True)
+                approx = cv2.approxPolyDP(cnts[idx], 0.04 * peri, True)
+
+                # plt.figure()
+                # plt.imshow(car_original)
+                # # plt.show()
+
+                # plt.figure()
+                # plt.imshow(car_aligned)
+
+                # plt.figure()
+                # plt.imshow(car_mask)
+
+                # plt.show()
+                # background_area = r*c
+                # print(car_area, background_area)
+                if r < min_height:
+                    raise RuntimeError(f"Image height is short ({r}))")
+                elif r == 0 or c == 0:
+                    raise RuntimeError(
+                        f"Image has empty rows ({r}) or cols ({c})")
+                elif len(approx) < 3 or len(approx) > 5:
+                    raise RuntimeError("Not a square")
+                # elif car_area / background_area < area_threshold:
+                #     raise RuntimeError(
+                #         f"Mask of car is not complete, ratio of car and background is {car_area / (r*c)}")
+                elif c < ratio_threshold*r:
+                    raise RuntimeError(
+                        f"Aspect ratio of car is not correct rows ({r}) and cols ({c})")
+                cars_succeed.append(car_aligned)
+            except RuntimeError:
+                cars_failed.append(car_aligned)
         print("-----"*10)
-        break
+        # break
 
     print(
         f"::{len(cars_succeed)} cars are succeed and {len(cars_failed)} cars are failed.")
     return cars_succeed, cars_failed
 
 
-data_path = "../potsdam_data/training"
-potsdam_cars_succeed, potsdam_cars_failed = return_potsdam_cars(
-    data_path, area_threshold=0.88)
+if __name__ == "__main__":
+    data_path = "../potsdam_data/training"
+    potsdam_cars_succeed, potsdam_cars_failed = return_potsdam_cars(
+        data_path, min_height=35, ratio_threshold=1.8)
 
-# succeed cars
-if potsdam_cars_succeed:
-    cars_path = os.path.join(os.path.split(data_path)[0], "potsdam_cars")
-    save_cars(potsdam_cars_succeed, cars_path)
+    # succeed cars
+    if potsdam_cars_succeed:
+        cars_path = os.path.join(os.path.split(data_path)[0], "potsdam_cars")
+        save_cars(potsdam_cars_succeed, cars_path)
 
-# failed cars
-if potsdam_cars_failed:
-    cars_path = os.path.join(os.path.split(data_path)[
-                             0], "potsdam_cars_failed")
-    save_cars(potsdam_cars_failed, cars_path)
+    # failed cars
+    if potsdam_cars_failed:
+        cars_path = os.path.join(os.path.split(data_path)[
+            0], "potsdam_cars_failed")
+        save_cars(potsdam_cars_failed, cars_path)
+
+    json_path = "../potsdam_data/cem-v0/vehicles_600_carssmalltrucks_outside_bnr10-bnf-defo0.05/annotations.json"
+    artificial_cars_succeed, artificial_cars_failed = return_artificial_cars(
+        json_path, buffer=5)
+
+    # succeed cars
+    if artificial_cars_succeed:
+        cars_path = "../potsdam_data/artificial_cars"
+        save_cars(artificial_cars_succeed, cars_path)
+
+    # failed cars
+    if artificial_cars_failed:
+        cars_path = "../potsdam_data/artificial_failed"
+        save_cars(artificial_cars_failed, cars_path)
