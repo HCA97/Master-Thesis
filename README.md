@@ -27,7 +27,7 @@ docker run -u $(id -u ${USER}):$(id -g ${USER}) -p 8888:8888 -e JUPYTER_ENABLE_L
 
 ### Dataset
 
-Potsdam dataset can be found https://www.dropbox.com/s/abx67bjzz1qzj02/artifive-potsdam_base.zip?dl=0.
+Potsdam dataset can be found <https://www.dropbox.com/s/abx67bjzz1qzj02/artifive-potsdam_base.zip?dl=0>.
 
 **Note** After you install them you have to run `crop_cars.py` to crop real and artificial cars. If you want to do that you can find the cropped real and artificial cars here.
 
