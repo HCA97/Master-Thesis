@@ -1,12 +1,13 @@
-import matplotlib.pyplot as plt
 import os
+import argparse
+
+import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader, Dataset
-import torch as th
 from skimage.transform import swirl
 from skimage.filters import gaussian
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader, Dataset
 
 from utility import fid_score
 
@@ -42,12 +43,14 @@ class FIDTestFolder(Dataset):
         img = Image.open(file).convert('RGB')
         img_deformed = np.array(img.copy(), dtype=np.float32) / 255.0
 
-        # rotate
+        # deformations
         if self.deformation and self.deformation_kwargs:
             if self.deformation == "gaus_noise":
-                mean, std = 0, self.deformation_kwargs
-                img_deformed += np.random.normal(
-                    size=img_deformed.shape, loc=mean, scale=std)
+                alpha = self.deformation_kwargs
+                noise = np.random.normal(
+                    size=img_deformed.shape, loc=0, scale=1)
+                noise = (noise - noise.min()) / (noise.max() - noise.min())
+                img_deformed = (1 - alpha)*img_deformed + alpha*noise
             elif self.deformation == "salt_pepper_noise":
                 ratio = np.clip(self.deformation_kwargs, 0, 1)
                 r, c = img_deformed.shape[:2]
@@ -58,14 +61,14 @@ class FIDTestFolder(Dataset):
             elif self.deformation == "swirl":
                 strength = self.deformation_kwargs
                 img_deformed = swirl(
-                    img_deformed, radius=32, strength=strength)
+                    img_deformed, radius=48, strength=strength)
             elif self.deformation == "blur":
                 sigma = self.deformation_kwargs
                 img_deformed = gaussian(
                     img_deformed, sigma=sigma, multichannel=True)
 
             # make sure it is between [0, 1]
-            img_deformed = np.clip(img_deformed, 0, 1)
+            img_deformed = np.clip(img_deformed, 0, 1).astype(np.float32)
 
         if self.transform:
             img = self.transform(img)
@@ -75,11 +78,19 @@ class FIDTestFolder(Dataset):
 
 
 # test dataset
-potsdam_dir = "../potsdam_data/potsdam_cars"
+parser = argparse.ArgumentParser("FID Testing Script")
+parser.add_argument(
+    "--potsdam_dir", default="../potsdam_data/potsdam_cars", help="path to potsdam cars")
+parser.add_argument("--layer_idx", default=33,
+                    type=int, help="VGG16 layer index")
+args = parser.parse_args()
+
+potsdam_dir = args.potsdam_dir
+layer_idx = args.layer_idx
 
 deformations = ["swirl", "blur", "salt_pepper_noise", "gaus_noise"]
-params = [[3, 5, 7, 10], [0.1, 1, 3, 5],
-          [0.01, 0.05, 0.1, 0.25], [0.01, 0.05, 0.1, 0.25]]
+params = [[3, 5, 7, 10], [1, 3, 5, 7],
+          [0.01, 0.05, 0.1, 0.25], [0.1, 0.25, 0.50, 0.75]]
 fid_scores = dict((deformation, []) for deformation in deformations)
 
 fig, axes = plt.subplots(nrows=len(params[0]), ncols=len(deformations) + 1)
@@ -93,15 +104,15 @@ for i, (param, deformation) in enumerate(zip(params, deformations)):
         # compute fid score
         dataloader = DataLoader(dataset, 1024, shuffle=True, num_workers=4)
         imgs1, imgs2 = next(iter(dataloader))
-        fid = fid_score(imgs1, imgs2, device="cuda:0")
+        # 33 => bn, 24 => normal
+        fid = fid_score(imgs1, imgs2, device="cuda:0", layer_idx=24)
         print(
             f"Deformation {deformation} - Param {p} - FID Score {fid}")
         fid_scores[deformation].append(fid)
 
         # convert to numpy
-        img_deformed = (img_deformed.detach().cpu(
-        ).numpy().transpose(1, 2, 0) + 1) / 2
-        img = (img.detach().cpu().numpy().transpose(1, 2, 0) + 1) / 2
+        img_deformed = (img_deformed.numpy().transpose(1, 2, 0) + 1) / 2
+        img = (img.numpy().transpose(1, 2, 0) + 1) / 2
 
         # plot results
         axes[j][i].imshow(img_deformed)

@@ -1,3 +1,5 @@
+from typing import Tuple, List, Union
+
 import numpy as np
 from scipy.linalg import sqrtm
 import torch as th
@@ -18,8 +20,8 @@ def weights_init_normal(m):
 
 
 @th.no_grad()
-def vgg16_get_activation_maps(imgs: th.Tensor, layer_idx: int, device: str, global_pooling: bool = True) -> th.Tensor:
-    """Get activation maps of VGG16.
+def vgg16_get_activation_maps(imgs: th.Tensor, layer_idx: int, device: str, normalize_range: Tuple[int, int], global_pooling: bool = True) -> th.Tensor:
+    """Get activation maps of VGG-16 with BN.
 
     Parameters
     ----------
@@ -37,10 +39,19 @@ def vgg16_get_activation_maps(imgs: th.Tensor, layer_idx: int, device: str, glob
     th.Tensor
         activation maps
     """
-    vgg16 = torchvision.models.vgg16(pretrained=True).to(device)
+    # vgg16 = torchvision.models.vgg16(pretrained=True).to(device)
+    vgg16 = torchvision.models.vgg16_bn(pretrained=True).to(device)
+    vgg16.eval()
     features = vgg16.features
+    # print(features)
 
-    x = imgs.to(device)
+    # normalize imgs for VGG-16:
+    min_, max_ = normalize_range
+    imgs_norm = (imgs - min_) / (max_ - min_)
+    x = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                         std=[0.229, 0.224, 0.225])(imgs_norm)
+    # x = imgs
+    x = x.to(device)
     for i, fet in enumerate(features):
         if i+1 > layer_idx:
             break
@@ -49,11 +60,13 @@ def vgg16_get_activation_maps(imgs: th.Tensor, layer_idx: int, device: str, glob
     if global_pooling:
         x = th.nn.AdaptiveMaxPool2d(1)(x)
 
+    del vgg16
+
     return x.detach().cpu().clone()
 
 
-def fid_score(imgs1: th.Tensor, imgs2: th.Tensor, n_cases: int = 1024, layer_idx: int = 24, device: str = "cpu") -> float:
-    """Computes the FID score between ``imgs1`` and ``imgs2`` using VGG16.
+def fid_score(imgs1: th.Tensor, imgs2: th.Tensor, n_cases: int = 1024, layer_idx: int = 24, device: str = "cpu", normalize_range: Tuple[int, int] = (-1, 1)) -> float:
+    """Computes the FID score between ``imgs1`` and ``imgs2`` using VGG-16.
 
     Parameters
     ----------
@@ -93,11 +106,11 @@ def fid_score(imgs1: th.Tensor, imgs2: th.Tensor, n_cases: int = 1024, layer_idx
 
     # activation of dataset 1
     act1 = np.squeeze(vgg16_get_activation_maps(
-        imgs1[:n_cases], layer_idx, device).numpy())
+        imgs1[:n_cases], layer_idx, device, normalize_range).numpy())
 
     # activation of dataset 2
     act2 = np.squeeze(vgg16_get_activation_maps(
-        imgs2[:n_cases], layer_idx, device).numpy())
+        imgs2[:n_cases], layer_idx, device, normalize_range).numpy())
 
     # https://machinelearningmastery.com/how-to-implement-the-frechet-inception-distance-fid-from-scratch/
     # calculate mean and covariance statistics
@@ -109,6 +122,7 @@ def fid_score(imgs1: th.Tensor, imgs2: th.Tensor, n_cases: int = 1024, layer_idx
     covmean = sqrtm(sigma1.dot(sigma2))
     # check and correct imaginary numbers from sqrt
     if np.iscomplexobj(covmean):
+        print("[WARNING] Computation of covariance is unstable.")
         covmean = covmean.real
     # calculate score
     fid = ssdiff + np.trace(sigma1 + sigma2 - 2.0 * covmean)
