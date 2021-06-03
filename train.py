@@ -27,19 +27,25 @@ from scripts.callbacks import *
 
 
 # POTSDAM CARS
+generator_params = {"n_layers": 4, "init_channels": 512}
+discriminator_params = {"base_channels": 32, "n_layers": 4, "heat_map": False}
+
 img_dim = (3, 32, 64)
+# img_dim = (3, 48, 96)
 batch_size = 64
-max_epochs = 500
+max_epochs = 10
 data_dir = "/scratch/s7hialtu/potsdam_cars"
-results_dir = "/scratch/s7hialtu/dcgan"
+results_dir = "/scratch/s7hialtu/dcgan_bigger"
 
 if not os.path.isdir(data_dir):
     data_dir = "../potsdam_data/potsdam_cars"
     results_dir = "logs"
 
-model = GAN(img_dim)
+model = GAN(img_dim, discriminator_params=discriminator_params,
+            generator_params=generator_params)
 
-potsdam = PostdamCarsDataModule(data_dir, batch_size=batch_size)
+potsdam = PostdamCarsDataModule(
+    data_dir, img_size=img_dim[1:], batch_size=batch_size)
 potsdam.setup()
 
 callbacks = [
