@@ -81,14 +81,21 @@ class GAN(pl.LightningModule):
         return result
 
     def disc_step(self, real: th.Tensor) -> th.Tensor:
+
         # Train with real
+        real = real.requires_grad_(True)
         real_pred = self.discriminator(real)
         real_gt = th.ones_like(real_pred)
         real_loss = self.criterion(real_pred, real_gt)
 
+        # Gradient Penalty (R1)
         gp_loss = 0
         if self.hparams.use_gp:
-            gp_loss = 0
+            # https://github.com/huangzh13/StyleGAN.pytorch/blob/master/models/Losses.py#L174
+            grad = th.autograd.grad(real_pred, real, grad_outputs=th.ones(real_pred.size()).to(self.device),
+                                    create_graph=True, retain_graph=True, only_inputs=True)[0].view(real.size(0), -1)
+            gp_loss = th.sum(th.mul(grad, grad))
+            print(gp_loss)
 
         # Train with fake
         fake_pred = self.get_pred_fake(real)
