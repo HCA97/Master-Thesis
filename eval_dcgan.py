@@ -15,7 +15,7 @@ parser.add_argument("--checkpoint_dir",
                     default="experiments/dcgan/lightning_logs/version_0/checkpoints", help="path to checkpoints")
 parser.add_argument(
     "--potsdam_dir", default="../potsdam_data/potsdam_cars", help="path to potsdam cars")
-parser.add_argument("--layer_idx", default=24, type=int,
+parser.add_argument("--layer_idx", default=33, type=int,
                     help="which VGG16 layer to use")
 parser.add_argument("results_dir", help="where to save the results")
 parser.add_argument("--interval", default=50, type=int,
@@ -28,7 +28,7 @@ checkpoint_dir = args.checkpoint_dir
 potsdam_dir = args.potsdam_dir
 results_dir = args.results_dir
 
-checkpoints = [i for i in range(0, 500, interval)] + [499]
+checkpoints = [4] + [i-1 for i in range(interval, 500, interval)] + [499]
 checkpoint_path = os.path.join(checkpoint_dir, "epoch={}.ckpt")
 
 # other arguments

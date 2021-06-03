@@ -10,6 +10,8 @@ from scripts.callbacks import *
 from scripts.models import *
 from scripts.dataloader import *
 
+NUM_ROWS = {512: 32, 256: 32, 128: 16, 64: 8, 32: 8, 16: 4}
+
 
 @th.no_grad()
 def plot_discriminator_steps(img, pl_module, save_dir):
@@ -24,13 +26,14 @@ def plot_discriminator_steps(img, pl_module, save_dir):
         x = layer(x)
         if layer.__class__.__name__ == "ConvBlock":
             dis_inter_layers.append(x.detach().clone().permute(1, 0, 2, 3))
-    x = x.reshape(1, -1)
+    if not pl_module.discriminator.heat_map:
+        x = x.reshape(1, -1)
     pred = pl_module.discriminator.l1(x).detach().cpu().numpy()
 
     # Plot Inner Layers
     for i, out in enumerate(dis_inter_layers):
         grid = torchvision.utils.make_grid(
-            out, nrow=8, padding=1, normalize=True).numpy().transpose((1, 2, 0))
+            out, nrow=NUM_ROWS[out.shape[0]], padding=1, normalize=True).numpy().transpose((1, 2, 0))
 
         plt.figure(figsize=(12, 8))
         plt.title(f"Discriminator Layer {i+1}", fontsize=20)
@@ -38,6 +41,18 @@ def plot_discriminator_steps(img, pl_module, save_dir):
         plt.tight_layout()
         plt.axis("off")
         plt.savefig(os.path.join(save_dir, f"disc_layer_{i+1}.png"))
+
+        # close everything, i don't know how important it is
+        plt.clf()
+        plt.close()
+
+    if pl_module.discriminator.heat_map:
+        plt.figure(figsize=(12, 8))
+        plt.title(f"Discriminator Final Layer {i+1}", fontsize=20)
+        plt.imshow(np.squeeze(pred), vmax=1, vmin=0, cmap="gray")
+        plt.tight_layout()
+        plt.axis("off")
+        plt.savefig(os.path.join(save_dir, f"disc_final_layer.png"))
 
         # close everything, i don't know how important it is
         plt.clf()
@@ -67,7 +82,11 @@ def plot_generator_steps(z, pl_module, save_dir):
     os.makedirs(save_dir, exist_ok=True)
 
     # Generator Inner Layers
-    x = pl_module.generator.l1(z).reshape(1, 128, 8, 16).detach()
+    init_channels = pl_module.generator.init_channels
+    init_height = pl_module.generator.init_height
+    init_width = pl_module.generator.init_width
+    x = pl_module.generator.l1(z).reshape(
+        1, init_channels, init_height, init_width).detach()
     gen_inter_layers = []
     for layer in pl_module.generator.conv_blocks:
         x = layer(x)
@@ -78,7 +97,7 @@ def plot_generator_steps(z, pl_module, save_dir):
     # Plot Inner Layers
     for i, out in enumerate(gen_inter_layers[:-1]):
         grid = torchvision.utils.make_grid(
-            out, nrow=16, padding=1, normalize=True).numpy().transpose((1, 2, 0))
+            out, nrow=NUM_ROWS[out.shape[0]], padding=1, normalize=True).numpy().transpose((1, 2, 0))
 
         plt.figure(figsize=(12, 8))
         plt.title(f"Generator Layer {i+1}", fontsize=20)
