@@ -20,7 +20,7 @@ def weights_init_normal(m):
 
 
 @th.no_grad()
-def vgg16_get_activation_maps(imgs: th.Tensor, layer_idx: int, device: str, normalize_range: Tuple[int, int], global_pooling: bool = True) -> th.Tensor:
+def vgg16_get_activation_maps(imgs: th.Tensor, layer_idx: int, device: str, normalize_range: Tuple[int, int], global_pooling: bool = True, use_bn: bool = True) -> th.Tensor:
     """Get activation maps of VGG-16 with BN.
 
     Parameters
@@ -39,18 +39,17 @@ def vgg16_get_activation_maps(imgs: th.Tensor, layer_idx: int, device: str, norm
     th.Tensor
         activation maps
     """
-    # vgg16 = torchvision.models.vgg16(pretrained=True).to(device)
-    vgg16 = torchvision.models.vgg16_bn(pretrained=True).to(device)
+    vgg16 = torchvision.models.vgg16(pretrained=True).to(
+        device) if not use_bn else torchvision.models.vgg16_bn(pretrained=True).to(device)
     vgg16.eval()
     features = vgg16.features
-    # print(features)
 
     # normalize imgs for VGG-16:
     min_, max_ = normalize_range
     imgs_norm = (imgs - min_) / (max_ - min_)
     x = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                          std=[0.229, 0.224, 0.225])(imgs_norm)
-    # x = imgs
+
     x = x.to(device)
     for i, fet in enumerate(features):
         if i+1 > layer_idx:
@@ -65,7 +64,7 @@ def vgg16_get_activation_maps(imgs: th.Tensor, layer_idx: int, device: str, norm
     return x.detach().cpu().clone()
 
 
-def fid_score(imgs1: th.Tensor, imgs2: th.Tensor, n_cases: int = 1024, layer_idx: int = 24, device: str = "cpu", normalize_range: Tuple[int, int] = (-1, 1)) -> float:
+def fid_score(imgs1: th.Tensor, imgs2: th.Tensor, n_cases: int = 1024, layer_idx: int = 24, device: str = "cpu", normalize_range: Tuple[int, int] = (-1, 1), use_bn: bool = True) -> float:
     """Computes the FID score between ``imgs1`` and ``imgs2`` using VGG-16.
 
     Parameters
@@ -106,11 +105,11 @@ def fid_score(imgs1: th.Tensor, imgs2: th.Tensor, n_cases: int = 1024, layer_idx
 
     # activation of dataset 1
     act1 = np.squeeze(vgg16_get_activation_maps(
-        imgs1[:n_cases], layer_idx, device, normalize_range).numpy())
+        imgs1[:n_cases], layer_idx, device, normalize_range, use_bn=use_bn).numpy())
 
     # activation of dataset 2
     act2 = np.squeeze(vgg16_get_activation_maps(
-        imgs2[:n_cases], layer_idx, device, normalize_range).numpy())
+        imgs2[:n_cases], layer_idx, device, normalize_range, use_bn=use_bn).numpy())
 
     # https://machinelearningmastery.com/how-to-implement-the-frechet-inception-distance-fid-from-scratch/
     # calculate mean and covariance statistics

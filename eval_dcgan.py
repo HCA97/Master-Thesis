@@ -15,20 +15,21 @@ parser.add_argument("--checkpoint_dir",
                     default="experiments/dcgan/lightning_logs/version_0/checkpoints", help="path to checkpoints")
 parser.add_argument(
     "--potsdam_dir", default="../potsdam_data/potsdam_cars", help="path to potsdam cars")
-parser.add_argument("--layer_idx", default=33, type=int,
-                    help="which VGG16 layer to use")
 parser.add_argument("results_dir", help="where to save the results")
 parser.add_argument("--interval", default=50, type=int,
                     help="interval between two epochs")
+parser.add_argument("--use_bn", action="store_true",
+                    help="use vgg with bn or not", dest="use_bn")
+parser.set_defaults(use_bn=False)
 args = parser.parse_args()
 
-layer_idx = args.layer_idx
+layer_idx = 33 if args.use_bn else 24
 interval = args.interval
 checkpoint_dir = args.checkpoint_dir
 potsdam_dir = args.potsdam_dir
 results_dir = args.results_dir
 
-checkpoints = [4] + [i-1 for i in range(interval, 500, interval)] + [499]
+checkpoints = [i-1 for i in range(interval, 500, interval)] + [499]
 checkpoint_path = os.path.join(checkpoint_dir, "epoch={}.ckpt")
 
 # other arguments
@@ -51,7 +52,8 @@ dataloader = potsdam_dataset.train_dataloader()
 imgs2 = next(iter(dataloader))[0]
 imgs1 = next(iter(dataloader))[0]
 # # 33 => bn, 24 => normal
-fid = fid_score(imgs1, imgs2, device="cuda:0", layer_idx=layer_idx)
+fid = fid_score(imgs1, imgs2, device="cuda:0",
+                layer_idx=layer_idx, use_bn=args.use_bn)
 print(f"FID score of training set is {fid}.")
 # raise RuntimeError
 del imgs1
@@ -71,7 +73,8 @@ with th.no_grad():
             z_fid = th.normal(
                 0, 1, (1024, model.hparams.latent_dim, 1, 1), device=model.device)
         imgs1 = model(z_fid)
-        fid = fid_score(imgs1, imgs2, device="cuda:0")
+        fid = fid_score(imgs1, imgs2, device="cuda:0",
+                        layer_idx=layer_idx, use_bn=args.use_bn)
         del imgs1
         print(f"Epoch {i} - FID {fid}")
         # raise RuntimeError()

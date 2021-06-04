@@ -81,12 +81,14 @@ class FIDTestFolder(Dataset):
 parser = argparse.ArgumentParser("FID Testing Script")
 parser.add_argument(
     "--potsdam_dir", default="../potsdam_data/potsdam_cars", help="path to potsdam cars")
-parser.add_argument("--layer_idx", default=33,
-                    type=int, help="VGG16 layer index")
+parser.add_argument("--use_bn", action="store_true",
+                    help="use vgg with bn or not", dest="use_bn")
+parser.set_defaults(use_bn=False)
 args = parser.parse_args()
 
 potsdam_dir = args.potsdam_dir
-layer_idx = args.layer_idx
+layer_idx = 33 if args.use_bn else 24
+
 
 deformations = ["swirl", "blur", "salt_pepper_noise", "gaus_noise"]
 params = [[3, 5, 7, 10], [1, 3, 5, 7],
@@ -105,7 +107,8 @@ for i, (param, deformation) in enumerate(zip(params, deformations)):
         dataloader = DataLoader(dataset, 1024, shuffle=True, num_workers=4)
         imgs1, imgs2 = next(iter(dataloader))
         # 33 => bn, 24 => normal
-        fid = fid_score(imgs1, imgs2, device="cuda:0", layer_idx=24)
+        fid = fid_score(imgs1, imgs2, device="cuda:0",
+                        layer_idx=layer_idx, use_bn=args.use_bn)
         print(
             f"Deformation {deformation} - Param {p} - FID Score {fid}")
         fid_scores[deformation].append(fid)

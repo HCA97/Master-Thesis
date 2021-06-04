@@ -115,15 +115,18 @@ def plot_generator_steps(z, pl_module, save_dir):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Show inner layers of DCGAN")
     parser.add_argument(
-        "--checkpoint_path", default="experiments/dcgan/lightning_logs/version_0/checkpoints/epoch=499.ckpt", help="path to DCGAN checkpoint")
+        "--checkpoint_dir", default="experiments/dcgan/lightning_logs/version_0/checkpoints/epoch=499.ckpt", help="path to DCGAN checkpoint")
     parser.add_argument(
         "--data_dir", default="../potsdam_data/potsdam_cars", help="path to real cars directory")
+    parser.add_argument("--n_samples", default=5,
+                        type=int, help="number of samples")
     parser.add_argument("save_dir", help="save directory path")
     args = parser.parse_args()
 
-    checkpoint_path = args.checkpoint_path
+    checkpoint_path = args.checkpoint_dir
     data_dir = args.data_dir
     save_dir = args.save_dir
+    n_samples = args.n_samples
 
     # data loader
     potsdam = PostdamCarsDataModule(data_dir, batch_size=1)
@@ -134,17 +137,18 @@ if __name__ == "__main__":
     model.eval()
 
     # noise
-    z = th.normal(0, 1, (1, model.hparams.latent_dim),
-                  device=model.device)
+    for i in range(1, n_samples+1):
+        z = th.normal(0, 1, (1, model.hparams.latent_dim),
+                      device=model.device)
 
-    # fake imgs
-    fake_img = plot_generator_steps(
-        z, model, os.path.join(save_dir, "fake_img"))
-    plot_discriminator_steps(
-        fake_img, model, os.path.join(save_dir, "fake_img"))
+        # fake imgs
+        fake_img = plot_generator_steps(
+            z, model, os.path.join(save_dir, str(i), "fake_img"))
+        plot_discriminator_steps(
+            fake_img, model, os.path.join(save_dir, str(i), "fake_img"))
 
-    # real imgs
-    real_img, _ = next(iter(potsdam.train_dataloader()))
-    plot_discriminator_steps(
-        real_img, model, os.path.join(save_dir, "real_img"))
+        # real imgs
+        real_img, _ = next(iter(potsdam.train_dataloader()))
+        plot_discriminator_steps(
+            real_img, model, os.path.join(save_dir, str(i), "real_img"))
     # plt.show()
