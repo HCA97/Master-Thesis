@@ -68,18 +68,20 @@ class ImageFolder(Dataset):
 class PostdamCarsDataModule(LightningModule):
     """Potsdam cars data loader for GAN."""
 
-    def __init__(self, data_dir: str, img_size: Tuple[int, int] = (32, 64), batch_size: int = 64):
+    def __init__(self, data_dir: str, img_size: Tuple[int, int] = (32, 64), batch_size: int = 64, transform=None):
         super().__init__()
         self.data_dir = data_dir
         self.batch_size = batch_size
         self.img_size = img_size
         self.dataset = None
+        self.transform = transforms.Compose([transforms.Resize(self.img_size), transforms.ToTensor(),
+                                             transforms.Normalize([0.5], [0.5])])
+        if transform:
+            self.transform = transform
 
     def setup(self, state=None):
         self.has_setup_fit = True
-        self.dataset = ImageFolder(self.data_dir,
-                                   transform=transforms.Compose([transforms.Resize(self.img_size), transforms.ToTensor(),
-                                                                 transforms.Normalize([0.5], [0.5])]))
+        self.dataset = ImageFolder(self.data_dir, transform=self.transform)
 
     def train_dataloader(self):
         return DataLoader(self.dataset, batch_size=self.batch_size, shuffle=True, num_workers=4)

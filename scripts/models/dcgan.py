@@ -20,7 +20,7 @@ class GAN(pl.LightningModule):
 
     """
 
-    def __init__(self, img_dim, learning_rate=0.0002, latent_dim=100, betas=(0.5, 0.999), discriminator_params=None, generator_params=None, use_gp=False):
+    def __init__(self, img_dim, learning_rate=0.0002, latent_dim=100, betas=(0.5, 0.999), discriminator_params=None, generator_params=None, use_gp=False, alpha=1.0):
         super().__init__()
         self.save_hyperparameters()
 
@@ -94,8 +94,8 @@ class GAN(pl.LightningModule):
             # https://github.com/huangzh13/StyleGAN.pytorch/blob/master/models/Losses.py#L174
             grad = th.autograd.grad(real_pred, real, grad_outputs=th.ones(real_pred.size()).to(self.device),
                                     create_graph=True, retain_graph=True, only_inputs=True)[0].view(real.size(0), -1)
-            gp_loss = th.sum(th.mul(grad, grad))
-            print(gp_loss)
+            gp_loss = self.hparams.alpha * th.sum(th.mul(grad, grad))
+            # print(gp_loss)
 
         # Train with fake
         fake_pred = self.get_pred_fake(real)
