@@ -77,7 +77,7 @@ for transform in dataaug:
         TensorboardGeneratorSampler(
             epoch_interval=25, num_samples=batch_size, normalize=True),
         LatentDimInterpolator(interpolate_epoch_interval=25, num_samples=10),
-        ModelCheckpoint(save_last=True, period=25,
+        ModelCheckpoint(period=25,
                         save_top_k=-1, filename="{epoch}")
     ]
 
