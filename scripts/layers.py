@@ -22,13 +22,13 @@ class ConvBlock(nn.Module):
         Non-linearity options are `relu, leakyrelu, tanh, sigmoid`, by default leakyrelu
     """
 
-    def __init__(self, in_f, out_f, stride=1, dropout=False, use_bn=True, act="leakyrelu"):
+    def __init__(self, in_f, out_f, stride=1, dropout=False, use_bn=True, act="leakyrelu", padding=1):
         """ConvBlock Constructor"""
         super(ConvBlock, self).__init__()
 
         self.conv_block = nn.ModuleList()
         self.conv_block.append(
-            nn.Conv2d(in_f, out_f, 3, stride=stride, padding=1, bias=not use_bn))
+            nn.Conv2d(in_f, out_f, 3, stride=stride, padding=padding, bias=not use_bn))
         if use_bn:
             self.conv_block.append(nn.BatchNorm2d(out_f, 0.8))
 

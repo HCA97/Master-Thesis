@@ -29,7 +29,7 @@ class BasicDiscriminator(nn.Module):
     UNSUPERVISED REPRESENTATION LEARNING WITH DEEP CONVOLUTIONAL GENERATIVE ADVERSARIAL NETWORKS.
     """
 
-    def __init__(self, img_size, base_channels=16, n_layers=4, heat_map=False):
+    def __init__(self, img_size, base_channels=16, n_layers=4, heat_map=False, padding=1):
         super().__init__()
 
         self.heat_map = heat_map
@@ -39,7 +39,7 @@ class BasicDiscriminator(nn.Module):
         layers = [ConvBlock(input_channels, base_channels, stride=2,
                             dropout=True, use_bn=False)]
         for i in range(1, n_layers):
-            layers.append(ConvBlock(base_channels*2**(i-1), base_channels*2**i, stride=2,
+            layers.append(ConvBlock(base_channels*2**(i-1), base_channels*2**i, stride=2, padding=padding,
                           dropout=True))
 
         self.conv_blocks = nn.Sequential(*layers)
@@ -47,8 +47,11 @@ class BasicDiscriminator(nn.Module):
             self.l1 = nn.Sequential(
                 nn.Conv2d(base_channels*2**(n_layers-1), 1, 1), nn.Sigmoid())
         else:
-            ds_size = math.ceil(input_width / 2**n_layers) * \
-                math.ceil(input_height / 2**n_layers)
+            output_width, output_height = input_width, input_height
+            for i in range(n_layers):
+                output_width = math.ceil((output_width - 2 + 2*padding) / 2)
+                output_height = math.ceil((output_height - 2 + 2*padding) / 2)
+            ds_size = output_width * output_height
             self.l1 = nn.Sequential(
                 nn.Linear(base_channels*2**(n_layers-1) * ds_size, 1), nn.Sigmoid())
 
