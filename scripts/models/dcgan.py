@@ -91,10 +91,10 @@ class GAN(pl.LightningModule):
         # Gradient Penalty (R1)
         gp_loss = 0
         if self.hparams.use_gp:
-            # https://github.com/huangzh13/StyleGAN.pytorch/blob/master/models/Losses.py#L174
             grad = th.autograd.grad(real_pred, real, grad_outputs=th.ones(real_pred.size()).to(self.device),
-                                    create_graph=True, retain_graph=True, only_inputs=True)[0].view(real.size(0), -1)
-            gp_loss = self.hparams.alpha * th.sum(th.mul(grad, grad))
+                                    create_graph=True, retain_graph=True, only_inputs=True)[0]
+            slopes = th.sqrt(th.sum(th.mul(grad, grad), dim=[1, 2, 3]))
+            gp_loss = 0.5 * self.hparams.alpha * th.mean(slopes)
             # print(gp_loss)
 
         # Train with fake

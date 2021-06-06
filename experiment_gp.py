@@ -1,5 +1,5 @@
-# from argparse import ArgumentParser
 import os
+from shutil import copyfile
 
 from torchsummary import summary
 import pytorch_lightning as pl
@@ -14,7 +14,7 @@ from scripts.callbacks import *
 generator_params = {"n_layers": 4, "init_channels": 512}
 discriminator_params = {"base_channels": 32, "n_layers": 4, "heat_map": False}
 use_gp = True
-alphas = [0.1, 10, 100]
+alphas = [0.1, 1, 10]
 
 img_dim = (3, 32, 64)
 batch_size = 64
@@ -54,3 +54,6 @@ for alpha in alphas:
     trainer = pl.Trainer(default_root_dir=results_dir, gpus=1, max_epochs=max_epochs,
                          callbacks=callbacks, progress_bar_refresh_rate=20)
     trainer.fit(model, datamodule=potsdam)
+
+file_name = os.path.basename(__file__)
+copyfile(file_name, os.path.join(results_dir, file_name))
