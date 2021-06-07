@@ -47,9 +47,9 @@ def vgg16_get_activation_maps(imgs: th.Tensor, layer_idx: int, device: str, norm
     # normalize imgs for VGG-16:
     min_, max_ = normalize_range
     imgs_norm = (imgs - min_) / (max_ - min_)
-    x = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                         std=[0.229, 0.224, 0.225])(imgs_norm)
-
+    x = torchvision.transforms.Compose([torchvision.transforms.Resize((32, 64)),
+                                        torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                                         std=[0.229, 0.224, 0.225])])(imgs_norm)
     x = x.to(device)
     for i, fet in enumerate(features):
         if i+1 > layer_idx:
@@ -92,7 +92,7 @@ def fid_score(imgs1: th.Tensor, imgs2: th.Tensor, n_cases: int = 1024, layer_idx
 
     References
     ----------
-    Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, Sepp Hochreiter. 
+    Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, Sepp Hochreiter.
     2017. GANs Trained by a Two Time-Scale Update Rule Converge to a Local Nash Equilibrium.
     Neural Information Processing Systems (NIPS)
     """
