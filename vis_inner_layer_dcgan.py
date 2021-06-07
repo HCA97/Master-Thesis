@@ -10,7 +10,7 @@ from scripts.callbacks import *
 from scripts.models import *
 from scripts.dataloader import *
 
-NUM_ROWS = {512: 32, 256: 32, 128: 16, 64: 8, 32: 8, 16: 4}
+NUM_ROWS = {1024: 64, 512: 32, 256: 32, 128: 16, 64: 8, 32: 8, 16: 4}
 
 
 @th.no_grad()
@@ -25,6 +25,9 @@ def plot_discriminator_steps(img, pl_module, save_dir):
     for layer in pl_module.discriminator.conv_blocks:
         x = layer(x)
         if layer.__class__.__name__ == "ConvBlock":
+            # if not dis_inter_layers:
+            #     x[:, :, 0, :] = 0
+            #     x[:, :, :, 0] = 0
             dis_inter_layers.append(x.detach().clone().permute(1, 0, 2, 3))
     if not pl_module.discriminator.heat_map:
         x = x.reshape(1, -1)
@@ -128,13 +131,14 @@ if __name__ == "__main__":
     save_dir = args.save_dir
     n_samples = args.n_samples
 
-    # data loader
-    potsdam = PostdamCarsDataModule(data_dir, batch_size=1)
-    potsdam.setup()
-
     # load model
     model = GAN.load_from_checkpoint(checkpoint_path)
     model.eval()
+
+    # data loader
+    potsdam = PostdamCarsDataModule(
+        data_dir, img_size=model.hparams.img_dim[1:], batch_size=1)
+    potsdam.setup()
 
     # noise
     for i in range(1, n_samples+1):

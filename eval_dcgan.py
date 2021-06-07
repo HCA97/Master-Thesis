@@ -20,6 +20,8 @@ parser.add_argument("--interval", default=50, type=int,
                     help="interval between two epochs")
 parser.add_argument("--use_bn", action="store_true",
                     help="use vgg with bn or not", dest="use_bn")
+parser.add_argument("--width", type=int, default=64, help="image width")
+parser.add_argument("--height", type=int, default=32, help="image height")
 parser.set_defaults(use_bn=False)
 args = parser.parse_args()
 
@@ -28,6 +30,7 @@ interval = args.interval
 checkpoint_dir = args.checkpoint_dir
 potsdam_dir = args.potsdam_dir
 results_dir = args.results_dir
+img_dim = (args.height, args.width)
 
 checkpoints = [i-1 for i in range(interval, 500, interval)] + [499]
 checkpoint_path = os.path.join(checkpoint_dir, "epoch={}.ckpt")
@@ -46,7 +49,8 @@ interpolate = LatentDimInterpolator(num_samples=10, steps=steps)
 z = None
 
 # fid score stuff
-potsdam_dataset = PostdamCarsDataModule(potsdam_dir, batch_size=1024)
+potsdam_dataset = PostdamCarsDataModule(
+    potsdam_dir, img_size=img_dim, batch_size=1024)
 potsdam_dataset.setup()
 dataloader = potsdam_dataset.train_dataloader()
 imgs2 = next(iter(dataloader))[0]
@@ -120,6 +124,10 @@ with th.no_grad():
         plt.close()
 
         inter_imgs.append(imageio.imread(inter_name))
+
+# save fid scores
+np.save(os.path.join(results_dir, "fid_score.npy"),
+        {"epochs": checkpoints, "fid": fid_scores})
 
 plt.figure()
 plt.plot(checkpoints, fid_scores, marker="*")
