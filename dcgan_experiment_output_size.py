@@ -1,5 +1,6 @@
 # from argparse import ArgumentParser
 import os
+from shutil import copyfile
 
 from torchsummary import summary
 import pytorch_lightning as pl
@@ -46,7 +47,7 @@ transform = transforms.Compose([transforms.Resize(img_dim[1:]),
 
 for generator_param, discriminator_param in parammeters:
     model = GAN(img_dim, discriminator_params=discriminator_param,
-                generator_params=discriminator_param, use_gp=use_gp, alpha=alpha)
+                generator_params=generator_param, use_gp=use_gp, alpha=alpha)
 
     potsdam = PostdamCarsDataModule(
         data_dir, img_size=img_dim[1:], batch_size=batch_size, transform=transform)
