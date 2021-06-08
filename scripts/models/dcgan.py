@@ -20,7 +20,17 @@ class GAN(pl.LightningModule):
 
     """
 
-    def __init__(self, img_dim, learning_rate=0.0002, latent_dim=100, betas=(0.5, 0.999), discriminator_params=None, generator_params=None, use_gp=False, alpha=1.0):
+    def __init__(self,
+                 img_dim,
+                 learning_rate=0.0002,
+                 latent_dim=100,
+                 betas=(0.5, 0.999),
+                 discriminator_params=None,
+                 generator_params=None,
+                 use_gp=False,
+                 alpha=1.0,
+                 gen_model="basic",
+                 disc_model="basic"):
         super().__init__()
         self.save_hyperparameters()
 
@@ -33,15 +43,26 @@ class GAN(pl.LightningModule):
 
     def get_generator(self, generator_params):
         generator_params = generator_params if generator_params else {}
-        generator = BasicGenerator(
-            self.hparams.img_dim, self.hparams.latent_dim, **generator_params)
+
+        if self.hparams.gen_model == "resnet":
+            generator = ResNetGenerator(self.hparams.img_dim,
+                                        self.hparams.latent_dim, **generator_params)
+        elif self.hparams.gen_model == "basic":
+            generator = BasicGenerator(self.hparams.img_dim,
+                                       self.hparams.latent_dim, **generator_params)
+        else:
+            raise NotImplementedError()
         generator.apply(weights_init_normal)
         return generator
 
     def get_discriminator(self, discriminator_params):
         discriminator_params = discriminator_params if discriminator_params else {}
-        discriminator = BasicDiscriminator(
-            self.hparams.img_dim, **discriminator_params)
+
+        if self.hparams.disc_model == "basic":
+            discriminator = BasicDiscriminator(
+                self.hparams.img_dim, **discriminator_params)
+        else:
+            raise NotImplementedError()
         discriminator.apply(weights_init_normal)
         return discriminator
 

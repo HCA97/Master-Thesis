@@ -37,11 +37,7 @@ class LatentDimInterpolator(Callback):
 
         if (trainer.current_epoch + 1) % self.interpolate_epoch_interval == 0:
 
-            images = self.interpolate_latent_space(
-                pl_module,
-                # type: ignore[union-attr]
-                latent_dim=pl_module.hparams.latent_dim
-            )
+            images = self.interpolate_latent_space(pl_module)
             # images = th.cat(images, dim=0)  # type: ignore[assignment]
 
             num_rows = self.steps + 2
@@ -51,8 +47,9 @@ class LatentDimInterpolator(Callback):
             trainer.logger.experiment.add_image(
                 str_title, grid, global_step=trainer.current_epoch)
 
-    def interpolate_latent_space(self, pl_module: LightningModule, latent_dim: int) -> List[Tensor]:
+    def interpolate_latent_space(self, pl_module: LightningModule) -> List[Tensor]:
         images = []
+        latent_dim = pl_module.hparams.latent_dim
 
         with th.no_grad():
             pl_module.eval()

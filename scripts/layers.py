@@ -1,6 +1,24 @@
 import torch.nn as nn
 
 
+class ResBlock(nn.Module):
+    def __init__(self, in_f, out_f, act="leakyrelu"):
+        super().__init__()
+
+        self.conv_block = ConvBlock(in_f, out_f, act=act)
+        if in_f != out_f:
+            self.conv_block = nn.Sequential(
+                ConvBlock(in_f, out_f, act=act), ConvBlock(out_f, out_f, act=act))
+        self.skip_connection = ConvBlock(out_f, out_f, act="linear")
+        self.act = nn.LeakyReLU(
+            0.2, inplace=True) if act == "leakyrelu" else nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        x = self.conv_block(x)
+        x = self.act(x + self.skip_connection(x))
+        return x
+
+
 class ConvBlock(nn.Module):
     """Simple convolution block.
 
@@ -40,6 +58,8 @@ class ConvBlock(nn.Module):
             self.conv_block.append(nn.Tanh())
         elif act == "sigmoid":
             self.conv_block.append(nn.Sigmoid())
+        elif act == "linear":
+            pass
         else:
             raise NotImplementedError(f"{act} is not implemented.")
 

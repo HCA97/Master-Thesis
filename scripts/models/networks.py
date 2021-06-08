@@ -67,6 +67,55 @@ class BasicDiscriminator(nn.Module):
 # -------------------------------------------------------- #
 
 
+class ResNetGenerator(nn.Module):
+    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=2, n_blocks=1):
+        super().__init__()
+
+        input_channels, input_height, input_width = img_size
+
+        scale_factor = 2**n_layers
+        if input_height % scale_factor != 0 or input_width % scale_factor != 0:
+            raise AttributeError(
+                f"Input size ({input_width}, {input_height}) must be divisible by scale factor {scale_factor}.")
+
+        self.init_height = input_height // scale_factor
+        self.init_width = input_width // scale_factor
+        self.latent_dim = latent_dim
+        self.init_channels = init_channels
+
+        self.l1 = nn.Linear(self.latent_dim, self.init_channels *
+                            self.init_width * self.init_height)
+
+        # first layer
+        layers = [nn.BatchNorm2d(self.init_channels),
+                  nn.Upsample(scale_factor=2)]
+        for n in range(n_blocks):
+            layers.append(ResBlock(self.init_channels, self.init_channels))
+
+        # middle layer
+        for i in range(1, n_layers):
+            layers.append(nn.Upsample(scale_factor=2))
+            layers.append(ResBlock(self.init_channels // 2 ** (i-1),
+                                   self.init_channels // 2 ** i))
+            for n in range(1, n_blocks):
+                layers.append(ResBlock(self.init_channels // 2 ** i,
+                                       self.init_channels // 2 ** i))
+
+        # last layer
+        layers.append(ConvBlock(self.init_channels // 2**(n_layers - 1),
+                      input_channels, use_bn=False, act="tanh"))
+
+        self.conv_blocks = nn.Sequential(*layers)
+
+    def forward(self, z):
+        x = z.view(z.shape[0], self.latent_dim)
+        x = self.l1(x)
+        x = x.view(x.shape[0], self.init_channels,
+                   self.init_height, self.init_width)
+        x = self.conv_blocks(x)
+        return x
+
+
 class BasicGenerator(nn.Module):
     """Basic Generator. It is similar to the
     https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/dcgan/dcgan.py
