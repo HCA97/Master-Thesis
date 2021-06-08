@@ -5,24 +5,27 @@ import torch as th
 import torchvision
 import imageio
 import numpy as np
+import cv2
 import matplotlib.pyplot as plt
 from torchsummary import summary
 
 from scripts import *
 
 parser = argparse.ArgumentParser("Evaluation script for DCGAN")
-parser.add_argument("--checkpoint_dir",
-                    default="experiments/dcgan/lightning_logs/version_0/checkpoints", help="path to checkpoints")
+parser.add_argument("checkpoint_dir", help="path to checkpoints")
+parser.add_argument("results_dir", help="where to save the results")
 parser.add_argument(
     "--potsdam_dir", default="../potsdam_data/potsdam_cars", help="path to potsdam cars")
-parser.add_argument("results_dir", help="where to save the results")
-parser.add_argument("--interval", default=50, type=int,
+parser.add_argument("--interval", default=25, type=int,
                     help="interval between two epochs")
-parser.add_argument("--use_bn", action="store_true",
-                    help="use vgg with bn or not", dest="use_bn")
+parser.add_argument("--not_use_bn", action="store_false",
+                    help="not use bn vgg with bn", dest="use_bn")
+parser.add_argument("--skip_train_fid", action="store_true",
+                    help="skip fid of training dataset", dest="skip_train_fid")
 parser.add_argument("--width", type=int, default=64, help="image width")
 parser.add_argument("--height", type=int, default=32, help="image height")
-parser.set_defaults(use_bn=False)
+parser.set_defaults(use_bn=True)
+parser.set_defaults(skip_train_fid=False)
 args = parser.parse_args()
 
 layer_idx = 33 if args.use_bn else 24
@@ -53,14 +56,15 @@ potsdam_dataset = PostdamCarsDataModule(
     potsdam_dir, img_size=img_dim, batch_size=1024)
 potsdam_dataset.setup()
 dataloader = potsdam_dataset.train_dataloader()
+
 imgs2 = next(iter(dataloader))[0]
 imgs1 = next(iter(dataloader))[0]
-# # 33 => bn, 24 => normal
-fid = fid_score(imgs1, imgs2, device="cuda:0",
-                layer_idx=layer_idx, use_bn=args.use_bn)
-print(f"FID score of training set is {fid}.")
-# raise RuntimeError
-del imgs1
+
+if not args.skip_train_fid:
+    fid = fid_score(imgs1, imgs2, device="cuda:0",
+                    layer_idx=layer_idx, use_bn=args.use_bn)
+    print(f"FID score of training set is {fid}.")
+
 z_fid = None
 fid_scores = []
 
@@ -79,9 +83,17 @@ with th.no_grad():
         imgs1 = model(z_fid)
         fid = fid_score(imgs1, imgs2, device="cuda:0",
                         layer_idx=layer_idx, use_bn=args.use_bn)
-        del imgs1
+
+        # save the images
+        for k, img in enumerate(imgs1):
+            img_folder = os.path.join(results_dir, "images", f"epoch={i}")
+            os.makedirs(img_folder, exist_ok=True)
+            img = img.detach().cpu().numpy().transpose(1, 2, 0)
+            img = (img + 1) / 2
+            cv2.imwrite(os.path.join(img_folder, f"{k}.png"), cv2.cvtColor(
+                255*img, cv2.COLOR_RGB2BGR))
+
         print(f"Epoch {i} - FID {fid}")
-        # raise RuntimeError()
         fid_scores.append(fid)
 
         # generate examples
@@ -105,8 +117,7 @@ with th.no_grad():
         fake_imgs.append(imageio.imread(img_name))
 
         # interpolate
-        images = interpolate.interpolate_latent_space(
-            model, model.hparams.latent_dim)
+        images = interpolate.interpolate_latent_space(model)
         model.eval()
 
         grid = torchvision.utils.make_grid(
@@ -145,6 +156,3 @@ imageio.mimsave(os.path.join(results_dir, "images.gif"),
 
 imageio.mimsave(os.path.join(results_dir, "interpolation.gif"),
                 inter_imgs, fps=1)
-
-# print(summary(model.discriminator.cuda(), (3, 32, 62)))
-# print(summary(model.generator.cuda(), (100, 1, 1)))
