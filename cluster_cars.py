@@ -31,7 +31,8 @@ if not os.path.exists(numpy_path):
     cars = []
     for imgs, _ in dataloader:
 
-        act = vgg16_get_activation_maps(imgs, 33, "cuda:0", (-1, 1))
+        act = vgg16_get_activation_maps(
+            imgs, layer_idx=33, device="cuda:0", normalize_range=(-1, 1), use_bn=True)
 
         cars.append(imgs.detach().cpu().numpy().transpose(0, 2, 3, 1))
         feat.append(np.squeeze(act.detach().cpu().numpy()))
