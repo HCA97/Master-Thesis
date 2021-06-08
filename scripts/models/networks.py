@@ -1,7 +1,7 @@
 import math
 import torch as th
 import torch.nn as nn
-
+import torch.nn.functional as F
 from ..layers import *
 
 # -------------------------------------------------------- #
@@ -65,6 +65,56 @@ class BasicDiscriminator(nn.Module):
 # -------------------------------------------------------- #
 #                       Generators                         #
 # -------------------------------------------------------- #
+
+
+class UnetGenerator(nn.Module):
+
+    def __init__(self, n_channels=3, init_channels=64, n_layers=4, n_blocks=2):
+        super().__init__()
+
+        # down part
+        self.down = nn.ModuleList()
+        self.down.append(
+            ConvBlock(n_channels, init_channels, n_blocks=n_blocks))
+        for i in range(1, n_layers-1):
+            self.down.append(
+                ConvBlock(2**(i-1) * init_channels, 2**i * init_channels, n_blocks=n_blocks))
+
+        # bottleneck
+        self.bottle_neck = ConvBlock(
+            2**(n_layers-2) * init_channels, 2**(n_layers-1) * init_channels, n_blocks=n_blocks)
+
+        # up part
+        self.up = nn.ModuleList()
+        for i in range(n_layers-1, 0, -1):
+            block = nn.Sequential(
+                nn.Conv2d((2**(i - 1) + 2**i)*init_channels,
+                          2**(i-1) * init_channels, 1),
+                nn.LeakyReLU(0.2, inplace=True),
+                ConvBlock(2**(i-1) * init_channels, 2**(i-1)
+                          * init_channels, n_blocks=n_blocks)
+            )
+            self.up.append(block)
+
+        self.final = ConvBlock(init_channels, 3, use_bn=False, act="tanh")
+
+    def forward(self, x):
+
+        hidden_layers = []
+        for layer in self.down:
+            x = layer(x)
+            hidden_layers.append(x)
+            x = F.max_pool2d(x, kernel_size=2, stride=2)
+
+        x = self.bottle_neck(x)
+
+        for i, layer in enumerate(self.up):
+            x = F.interpolate(x, scale_factor=2)
+            x = th.cat([x, hidden_layers[-i-1]], axis=1)
+            x = layer(x)
+
+        x = self.final(x)
+        return x
 
 
 class ResNetGenerator(nn.Module):
