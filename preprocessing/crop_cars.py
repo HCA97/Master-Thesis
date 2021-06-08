@@ -1,10 +1,11 @@
 import os
 import re
 import json
+import argparse
 
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 
 def load_images_cv(path, filter_car=False):
@@ -86,7 +87,7 @@ def crop_car(img, coord, buffer=5):
     image = img.copy()
 
     # bbox
-    x_min, x_max, y_min, y_max = get_bbox(coord, buffer, image.shape)
+    x_min, x_max, y_min, y_max = get_bbox(coord, 5, image.shape)
     cx, cy = (x_max + x_min)//2, (y_min + y_max)//2
     angle = get_tilt(coord)
 
@@ -201,7 +202,7 @@ def return_potsdam_cars(data_path, buffer=5, min_height=20, area_threshold=0.9, 
                 car_original, car_aligned = crop_car(img, coord, buffer)
 
                 x_min, x_max, y_min, y_max = get_bbox(
-                    coord, buffer, mask.shape)
+                    coord, 5, mask.shape)
                 car_mask = mask[y_min:y_max, x_min:x_max]
                 r, c, _ = car_aligned.shape
 
@@ -249,31 +250,49 @@ def return_potsdam_cars(data_path, buffer=5, min_height=20, area_threshold=0.9, 
 
 
 if __name__ == "__main__":
-    data_path = "../potsdam_data/training"
+    parser = argparse.ArgumentParser("Crops cars from potsdam dataset")
+    parser.add_argument("--crop_artificial_cars", action="store_true",
+                        dest="crop_artificial_cars", help="compute artificial cars")
+    parser.add_argument(
+        "--save_path", default="../potsdam_data/potsdam_cars", help="where to save")
+    parser.add_argument(
+        "--data_path", default="../potsdam_data/training", help="Potsdam data path")
+    parser = parser.set_defaults(crop_artificial_cars=False)
+    args = parser.parse_args()
+
+    data_path = args.data_path
+    save_path = args.save_path
+    crop_artificial_cars = args.crop_artificial_cars
+
+    # params
+    min_height = 35  # pixles => 1.75 [m]
+    ratio_threshold = 1.8
+
     potsdam_cars_succeed, potsdam_cars_failed = return_potsdam_cars(
-        data_path, min_height=35, ratio_threshold=1.8)
+        data_path, min_height=min_height, ratio_threshold=ratio_threshold)
 
     # succeed cars
     if potsdam_cars_succeed:
-        cars_path = os.path.join(os.path.split(data_path)[0], "potsdam_cars")
+        cars_path = save_path
         save_cars(potsdam_cars_succeed, cars_path)
 
     # failed cars
     if potsdam_cars_failed:
-        cars_path = os.path.join(os.path.split(data_path)[
-            0], "potsdam_cars_failed")
+        cars_path = save_path + "_failed"
         save_cars(potsdam_cars_failed, cars_path)
 
-    json_path = "../potsdam_data/cem-v0/vehicles_600_carssmalltrucks_outside_bnr10-bnf-defo0.05/annotations.json"
-    artificial_cars_succeed, artificial_cars_failed = return_artificial_cars(
-        json_path, buffer=5)
+    # artificial cars
+    if crop_artificial_cars:
+        json_path = "../potsdam_data/cem-v0/vehicles_600_carssmalltrucks_outside_bnr10-bnf-defo0.05/annotations.json"
+        artificial_cars_succeed, artificial_cars_failed = return_artificial_cars(
+            json_path, buffer=5)
 
-    # succeed cars
-    if artificial_cars_succeed:
-        cars_path = "../potsdam_data/artificial_cars"
-        save_cars(artificial_cars_succeed, cars_path)
+        # succeed cars
+        if artificial_cars_succeed:
+            cars_path = "../potsdam_data/artificial_cars"
+            save_cars(artificial_cars_succeed, cars_path)
 
-    # failed cars
-    if artificial_cars_failed:
-        cars_path = "../potsdam_data/artificial_failed"
-        save_cars(artificial_cars_failed, cars_path)
+        # failed cars
+        if artificial_cars_failed:
+            cars_path = "../potsdam_data/artificial_failed"
+            save_cars(artificial_cars_failed, cars_path)
