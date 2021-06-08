@@ -45,7 +45,7 @@ class BasicDiscriminator(nn.Module):
         self.conv_blocks = nn.Sequential(*layers)
         if self.heat_map:
             self.l1 = nn.Sequential(
-                nn.Conv2d(base_channels*2**(n_layers-1), 1, 1), nn.Sigmoid())
+                nn.Conv2d(base_channels*2**(n_layers-1), 1, kernel_size=3, padding=1), nn.Sigmoid())
         else:
             output_width, output_height = input_width, input_height
             for i in range(n_layers):
