@@ -117,13 +117,12 @@ def plot_generator_steps(z, pl_module, save_dir):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Show inner layers of DCGAN")
-    parser.add_argument(
-        "--checkpoint_dir", default="experiments/dcgan/lightning_logs/version_0/checkpoints/epoch=499.ckpt", help="path to DCGAN checkpoint")
+    parser.add_argument("save_dir", help="save directory path")
+    parser.add_argument("checkpoint_dir", help="path to DCGAN checkpoint")
     parser.add_argument(
         "--data_dir", default="../potsdam_data/potsdam_cars", help="path to real cars directory")
-    parser.add_argument("--n_samples", default=5,
+    parser.add_argument("--n_samples", default=10,
                         type=int, help="number of samples")
-    parser.add_argument("save_dir", help="save directory path")
     args = parser.parse_args()
 
     checkpoint_path = args.checkpoint_dir
