@@ -257,7 +257,7 @@ if __name__ == "__main__":
         "--save_path", default="../potsdam_data/potsdam_cars", help="where to save")
     parser.add_argument(
         "--data_path", default="../potsdam_data/training", help="Potsdam data path")
-    parser = parser.set_defaults(crop_artificial_cars=False)
+    parser.set_defaults(crop_artificial_cars=False)
     args = parser.parse_args()
 
     data_path = args.data_path

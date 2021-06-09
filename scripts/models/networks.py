@@ -46,6 +46,9 @@ class BasicDiscriminator(nn.Module):
         if self.heat_map:
             self.l1 = nn.Sequential(
                 nn.Conv2d(base_channels*2**(n_layers-1), 1, kernel_size=3, padding=1), nn.Sigmoid())
+            # I cannot modify it since pytroch used different names for layers
+            # self.l1 = ConvBlock(base_channels*2**(n_layers-1),
+            #                     1, padding=padding, use_bn=False, act="sigmoid")
         else:
             output_width, output_height = input_width, input_height
             for i in range(n_layers):
@@ -69,7 +72,7 @@ class BasicDiscriminator(nn.Module):
 
 class UnetGenerator(nn.Module):
 
-    def __init__(self, n_channels=3, init_channels=64, n_layers=4, n_blocks=2):
+    def __init__(self, n_channels=3, init_channels=64, n_layers=4, n_blocks=2, act="relu"):
         super().__init__()
 
         # down part
@@ -78,21 +81,20 @@ class UnetGenerator(nn.Module):
             ConvBlock(n_channels, init_channels, n_blocks=n_blocks))
         for i in range(1, n_layers-1):
             self.down.append(
-                ConvBlock(2**(i-1) * init_channels, 2**i * init_channels, n_blocks=n_blocks))
+                ConvBlock(2**(i-1) * init_channels, 2**i * init_channels, n_blocks=n_blocks, act=act))
 
         # bottleneck
         self.bottle_neck = ConvBlock(
-            2**(n_layers-2) * init_channels, 2**(n_layers-1) * init_channels, n_blocks=n_blocks)
+            2**(n_layers-2) * init_channels, 2**(n_layers-1) * init_channels, n_blocks=n_blocks, act=act)
 
         # up part
         self.up = nn.ModuleList()
         for i in range(n_layers-1, 0, -1):
             block = nn.Sequential(
-                nn.Conv2d((2**(i - 1) + 2**i)*init_channels,
-                          2**(i-1) * init_channels, 1),
-                nn.LeakyReLU(0.2, inplace=True),
+                ConvBlock((2**(i - 1) + 2**i)*init_channels,
+                          2**(i-1) * init_channels, kernel_size=1, act=act),
                 ConvBlock(2**(i-1) * init_channels, 2**(i-1)
-                          * init_channels, n_blocks=n_blocks)
+                          * init_channels, n_blocks=n_blocks, act=act)
             )
             self.up.append(block)
 
@@ -118,7 +120,7 @@ class UnetGenerator(nn.Module):
 
 
 class ResNetGenerator(nn.Module):
-    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=2, n_blocks=1):
+    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=4, learn_upsample=False, act="relu", n_blocks=1):
         super().__init__()
 
         input_channels, input_height, input_width = img_size
@@ -139,17 +141,24 @@ class ResNetGenerator(nn.Module):
         # first layer
         layers = [nn.BatchNorm2d(self.init_channels),
                   nn.Upsample(scale_factor=2)]
+        if learn_upsample:
+            layers.append(ConvBlock(self.init_channels,
+                          self.init_channels, kernel_size=1, act=act))
         for n in range(n_blocks):
-            layers.append(ResBlock(self.init_channels, self.init_channels))
+            layers.append(ResBlock(self.init_channels,
+                          self.init_channels, act=act))
 
         # middle layer
         for i in range(1, n_layers):
             layers.append(nn.Upsample(scale_factor=2))
+            if learn_upsample:
+                layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
+                                        self.init_channels // 2 ** (i-1), kernel_size=1, act=act))
             layers.append(ResBlock(self.init_channels // 2 ** (i-1),
-                                   self.init_channels // 2 ** i))
+                                   self.init_channels // 2 ** i, act=act))
             for n in range(1, n_blocks):
                 layers.append(ResBlock(self.init_channels // 2 ** i,
-                                       self.init_channels // 2 ** i))
+                                       self.init_channels // 2 ** i, act=act))
 
         # last layer
         layers.append(ConvBlock(self.init_channels // 2**(n_layers - 1),
@@ -183,7 +192,7 @@ class BasicGenerator(nn.Module):
     UNSUPERVISED REPRESENTATION LEARNING WITH DEEP CONVOLUTIONAL GENERATIVE ADVERSARIAL NETWORKS.
     """
 
-    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=2):
+    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=2, act="leakyrelu", learn_upsample=False):
         super().__init__()
 
         input_channels, input_height, input_width = img_size
@@ -203,17 +212,26 @@ class BasicGenerator(nn.Module):
 
         # first layer
         layers = [nn.BatchNorm2d(self.init_channels),
-                  nn.Upsample(scale_factor=2),
-                  ConvBlock(self.init_channels, self.init_channels)]
+                  nn.Upsample(scale_factor=2)]
+        if learn_upsample:
+            layers.append(ConvBlock(self.init_channels,
+                          self.init_channels, kernel_size=1, act=act))
+        layers.append(ConvBlock(self.init_channels,
+                      self.init_channels, act=act))
 
         # middle layer
         for i in range(1, n_layers):
             layers.append(nn.Upsample(scale_factor=2))
-            layers.append(ConvBlock(self.init_channels // 2 **
-                          (i-1), self.init_channels // 2**i))
+            if learn_upsample:
+                layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
+                                        self.init_channels // 2 ** (i-1),
+                                        kernel_size=1, act=act))
+            layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
+                                    self.init_channels // 2 ** i,
+                                    act=act))
 
         # last layer
-        layers.append(ConvBlock(self.init_channels // 2**(n_layers - 1),
+        layers.append(ConvBlock(self.init_channels // 2**(n_layers-1),
                       input_channels, use_bn=False, act="tanh"))
 
         self.conv_blocks = nn.Sequential(*layers)

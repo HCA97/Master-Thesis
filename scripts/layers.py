@@ -4,18 +4,18 @@ import torch.nn as nn
 class ResBlock(nn.Module):
     def __init__(self, in_f, out_f, act="leakyrelu"):
         super().__init__()
-
-        self.conv_block = ConvBlock(in_f, out_f, act=act)
+        self.projection = None
         if in_f != out_f:
-            self.conv_block = nn.Sequential(
-                ConvBlock(in_f, out_f, act=act), ConvBlock(out_f, out_f, act=act))
-        self.skip_connection = ConvBlock(out_f, out_f, act="linear")
+            self.projection = ConvBlock(in_f, out_f, act=act)
+        self.conv_block = nn.Sequential(
+            ConvBlock(out_f, out_f, act=act), ConvBlock(out_f, out_f, act="linear"))
         self.act = nn.LeakyReLU(
             0.2, inplace=True) if act == "leakyrelu" else nn.ReLU(inplace=True)
 
     def forward(self, x):
-        x = self.conv_block(x)
-        x = self.act(x + self.skip_connection(x))
+        if self.projection is not None:
+            x = self.projection(x)
+        x = self.act(x + self.conv_block(x))
         return x
 
 
@@ -48,14 +48,14 @@ class ConvBlock(nn.Module):
     NotImplementedError
     """
 
-    def __init__(self, in_f, out_f, stride=1, dropout=False, use_bn=True, act="leakyrelu", padding=1, n_blocks=1):
+    def __init__(self, in_f, out_f, kernel_size=3, stride=1, dropout=False, use_bn=True, act="leakyrelu", padding=1, n_blocks=1):
         """ConvBlocks Constructor"""
         super(ConvBlock, self).__init__()
 
         self.conv_block = nn.ModuleList()
         for i in range(n_blocks):
             self.conv_block.append(
-                nn.Conv2d(in_f if i == 0 else out_f, out_f, 3, stride=stride, padding=padding, bias=not use_bn))
+                nn.Conv2d(in_f if i == 0 else out_f, out_f, kernel_size, stride=stride, padding=padding, bias=not use_bn))
             if use_bn:
                 self.conv_block.append(nn.BatchNorm2d(out_f, 0.8))
 

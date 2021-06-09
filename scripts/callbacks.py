@@ -11,6 +11,30 @@ except ImportError:
     _TORCHVISION_AVAILABLE = False
 
 
+class SaveWeights(Callback):
+    def __init__(self, epoch_interval=1):
+        super().__init__()
+        self.epoch_interval = epoch_interval
+
+    def on_epoch_end(self, trainer, pl_module):
+
+        if (trainer.current_epoch + 1) % self.epoch_interval == 0:
+            writer = trainer.logger.experiment
+
+            pl_module.eval()
+            with th.no_grad():
+                # save weights
+                for name, params in pl_module.generator.named_parameters():
+                    if params.grad is not None:
+                        writer.add_histogram(
+                            "Generator/" + name, params.detach().cpu().numpy(), trainer.current_epoch)
+                for name, params in pl_module.discriminator.named_parameters():
+                    if params.grad is not None:
+                        writer.add_histogram(
+                            "Discriminator/" + name, params.detach().cpu().numpy(), trainer.current_epoch)
+            pl_module.train()
+
+
 class LatentDimInterpolator(Callback):
     """Similar implementation of
     https://lightning-bolts.readthedocs.io/en/latest/variational_callbacks.html#
