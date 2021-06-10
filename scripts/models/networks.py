@@ -72,8 +72,11 @@ class BasicDiscriminator(nn.Module):
 
 class UnetGenerator(nn.Module):
 
-    def __init__(self, n_channels=3, init_channels=64, n_layers=4, n_blocks=2, act="relu"):
+    def __init__(self, n_channels=3, init_channels=64, n_layers=4, n_blocks=2, act="relu", **kwargs):
         super().__init__()
+
+        if n_layers < 2:
+            raise AttributeError("Number of layers must be larger than 1.")
 
         # down part
         self.down = nn.ModuleList()
@@ -92,7 +95,7 @@ class UnetGenerator(nn.Module):
         for i in range(n_layers-1, 0, -1):
             block = nn.Sequential(
                 ConvBlock((2**(i - 1) + 2**i)*init_channels,
-                          2**(i-1) * init_channels, kernel_size=1, act=act),
+                          2**(i-1) * init_channels, kernel_size=1, padding=0, act=act),
                 ConvBlock(2**(i-1) * init_channels, 2**(i-1)
                           * init_channels, n_blocks=n_blocks, act=act)
             )
@@ -100,10 +103,13 @@ class UnetGenerator(nn.Module):
 
         self.final = ConvBlock(init_channels, 3, use_bn=False, act="tanh")
 
-    def forward(self, x):
+    def forward(self, x_in):
 
-        hidden_layers = []
-        for layer in self.down:
+        x = self.down[0](x_in)
+        hidden_layers = [x]
+        x = F.max_pool2d(x, kernel_size=2, stride=2)
+
+        for layer in self.down[1:]:
             x = layer(x)
             hidden_layers.append(x)
             x = F.max_pool2d(x, kernel_size=2, stride=2)
@@ -116,11 +122,11 @@ class UnetGenerator(nn.Module):
             x = layer(x)
 
         x = self.final(x)
-        return x
+        return x_in + x
 
 
 class ResNetGenerator(nn.Module):
-    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=4, learn_upsample=False, act="relu", n_blocks=1):
+    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=4, learn_upsample=False, act="relu", n_blocks=1, **kwargs):
         super().__init__()
 
         input_channels, input_height, input_width = img_size
@@ -143,7 +149,7 @@ class ResNetGenerator(nn.Module):
                   nn.Upsample(scale_factor=2)]
         if learn_upsample:
             layers.append(ConvBlock(self.init_channels,
-                          self.init_channels, kernel_size=1, act=act))
+                          self.init_channels, kernel_size=1, padding=0, act=act))
         for n in range(n_blocks):
             layers.append(ResBlock(self.init_channels,
                           self.init_channels, act=act))
@@ -153,7 +159,7 @@ class ResNetGenerator(nn.Module):
             layers.append(nn.Upsample(scale_factor=2))
             if learn_upsample:
                 layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
-                                        self.init_channels // 2 ** (i-1), kernel_size=1, act=act))
+                                        self.init_channels // 2 ** (i-1), kernel_size=1, padding=0, act=act))
             layers.append(ResBlock(self.init_channels // 2 ** (i-1),
                                    self.init_channels // 2 ** i, act=act))
             for n in range(1, n_blocks):
@@ -192,7 +198,7 @@ class BasicGenerator(nn.Module):
     UNSUPERVISED REPRESENTATION LEARNING WITH DEEP CONVOLUTIONAL GENERATIVE ADVERSARIAL NETWORKS.
     """
 
-    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=2, act="leakyrelu", learn_upsample=False):
+    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=2, act="leakyrelu", learn_upsample=False, **kwargs):
         super().__init__()
 
         input_channels, input_height, input_width = img_size
@@ -225,7 +231,7 @@ class BasicGenerator(nn.Module):
             if learn_upsample:
                 layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
                                         self.init_channels // 2 ** (i-1),
-                                        kernel_size=1, act=act))
+                                        kernel_size=1, padding=0, act=act))
             layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
                                     self.init_channels // 2 ** i,
                                     act=act))
