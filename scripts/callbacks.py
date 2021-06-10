@@ -4,6 +4,8 @@ import torch as th
 from pytorch_lightning import Callback, LightningModule, Trainer
 from torch import Tensor
 
+from .utility import interpolate, fid, vgg16_get_activation_maps
+
 _TORCHVISION_AVAILABLE = True
 try:
     import torchvision
@@ -11,19 +13,68 @@ except ImportError:
     _TORCHVISION_AVAILABLE = False
 
 
-class SaveWeights(Callback):
+class Pix2PixCallback(Callback):
+    def __init__(self, epoch_interval=1, n_samples=5, normalize=True):
+        super().__init__()
+
+        self.epoch_interval = epoch_interval
+        self.n_samples = n_samples
+        self.normalize = normalize
+
+    def on_epoch_end(self, trainer, pl_module):
+
+        if (trainer.current_epoch + 1) % self.epoch_interval == 0 or trainer.current_epoch == 0:
+            if pl_module.hparams.gen_model in ["unet", "refiner"]:
+                pl_module.eval()
+
+                n_gen_input = min(len(pl_module.gen_input), self.n_samples)
+                n_imgs_real = min(len(pl_module.imgs_real), self.n_samples)
+
+                # pick n_samples fake cases
+                gen_input = pl_module.gen_input[:n_gen_input]
+                imgs_fake = pl_module(gen_input)
+
+                # make a grid
+                imgs = th.cat(
+                    [gen_input, imgs_fake, imgs_fake - gen_input], dim=0)
+                grid = torchvision.utils.make_grid(
+                    imgs, nrow=n_gen_input, normalize=self.normalize)
+
+                # logging
+                str_title = f'{pl_module.__class__.__name__}_gen_fake_imgs'
+                trainer.logger.experiment.add_image(
+                    str_title, grid, global_step=trainer.current_epoch)
+
+                # pick n_samples real cases
+                gen_input = pl_module.imgs_real[:n_imgs_real]
+                imgs_fake = pl_module(gen_input)
+
+                # make a grid
+                imgs = th.cat(
+                    [gen_input, imgs_fake, imgs_fake - gen_input], dim=0)
+                grid = torchvision.utils.make_grid(
+                    imgs, nrow=n_imgs_real, normalize=self.normalize)
+
+                # logging
+                str_title = f'{pl_module.__class__.__name__}_gen_real_imgs'
+                trainer.logger.experiment.add_image(
+                    str_title, grid, global_step=trainer.current_epoch)
+
+                pl_module.train()
+
+
+class ShowWeights(Callback):
     def __init__(self, epoch_interval=1):
         super().__init__()
         self.epoch_interval = epoch_interval
 
     def on_epoch_end(self, trainer, pl_module):
 
-        if (trainer.current_epoch + 1) % self.epoch_interval == 0:
+        if (trainer.current_epoch + 1) % self.epoch_interval == 0 or trainer.current_epoch == 0:
             writer = trainer.logger.experiment
 
             pl_module.eval()
             with th.no_grad():
-                # save weights
                 for name, params in pl_module.generator.named_parameters():
                     if params.grad is not None:
                         writer.add_histogram(
@@ -59,7 +110,11 @@ class LatentDimInterpolator(Callback):
 
     def on_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
 
-        if (trainer.current_epoch + 1) % self.interpolate_epoch_interval == 0:
+        if pl_module.hparams.gen_model in ["unet", "refiner"]:
+            raise AttributeError(
+                "This callback only for `basic` and `resnet` models.")
+
+        if (trainer.current_epoch + 1) % self.interpolate_epoch_interval == 0 or trainer.current_epoch == 0:
 
             images = self.interpolate_latent_space(pl_module)
             # images = th.cat(images, dim=0)  # type: ignore[assignment]
@@ -73,7 +128,7 @@ class LatentDimInterpolator(Callback):
 
     def interpolate_latent_space(self, pl_module: LightningModule) -> List[Tensor]:
         images = []
-        latent_dim = pl_module.hparams.latent_dim
+        latent_dim = pl_module.generator.latent_dim
 
         with th.no_grad():
             pl_module.eval()
@@ -90,7 +145,7 @@ class LatentDimInterpolator(Callback):
 
             for i in range(self.num_samples):
                 # interpolate points
-                points = self.interpolate(z1[i], z2[i], pl_module)
+                points = interpolate(z1[i], z2[i], self.steps, self.use_slerp)
                 points = points.view(points.shape[0], latent_dim, 1, 1)
 
                 # generate images
@@ -103,51 +158,10 @@ class LatentDimInterpolator(Callback):
         pl_module.train()
         return images
 
-    def interpolate(self, p1: Tensor, p2: Tensor, pl_module: LightningModule) -> Tensor:
-        """Interpolation of two latent points.
-
-        References
-        ----------
-        https://en.wikipedia.org/wiki/Slerp
-        https://machinelearningmastery.com/how-to-interpolate-and-perform-vector-arithmetic-with-faces-using-a-generative-adversarial-network/
-        """
-
-        points = th.zeros((self.steps + 2, len(p1)), device=pl_module.device)
-        ratios = th.linspace(0, 1, steps=self.steps)
-
-        points[0] = p1
-        points[-1] = p2
-
-        for i, ratio in enumerate(ratios):
-            # linear interpolation if omega -> 0 than it behaves like linear interpolation
-            noise = (1 - ratio) * p1 + ratio * p2
-
-            if self.use_slerp:
-                p1_ = p1/(th.linalg.norm(p1) + 1e-10)
-                p2_ = p2/(th.linalg.norm(p2) + 1e-10)
-
-                omega = th.acos(th.clip(th.dot(p1_, p2_), -1, 1))
-                if not th.isclose(th.sin(omega), th.zeros(1, device=pl_module.device)):
-                    noise = (th.sin((1 - ratio)*omega) * p1 +
-                             th.sin(ratio*omega) * p2) / th.sin(omega)
-
-            points[i+1] = noise
-        return points
-
 
 class TensorboardGeneratorSampler(Callback):
     """
     Generates images and logs to tensorboard.
-    Your model must implement the ``forward`` function for generation
-    Requirements::
-        # model must have img_dim arg
-        model.img_dim = (1, 28, 28)
-        # model forward must work for sampling
-        z = th.rand(batch_size, latent_dim)
-        img_samples = your_model(z)
-    Example::
-        from pl_bolts.callbacks import TensorboardGenerativeModelImageSampler
-        trainer = Trainer(callbacks=[TensorboardGenerativeModelImageSampler()])
 
     References
     ----------
@@ -196,10 +210,13 @@ class TensorboardGeneratorSampler(Callback):
         self.z = None
 
     def on_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
-        # type: ignore[union-attr]
 
-        if (trainer.current_epoch + 1) % self.epoch_interval == 0:
-            dim = (self.num_samples, pl_module.hparams.latent_dim, 1, 1)
+        if pl_module.hparams.gen_model in ["unet", "refiner"]:
+            raise AttributeError(
+                "This callback only for `basic` and `resnet` models but ")
+
+        if (trainer.current_epoch + 1) % self.epoch_interval == 0 or trainer.current_epoch == 0:
+            dim = (self.num_samples, pl_module.generator.latent_dim, 1, 1)
             if self.z is None:
                 self.z = th.normal(mean=0.0, std=1.0, size=dim,
                                    device=pl_module.device)
