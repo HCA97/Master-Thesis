@@ -29,13 +29,14 @@ class NoiseLayer(nn.Module):
 
 
 class ResBlock(nn.Module):
-    def __init__(self, in_f, out_f, act="leakyrelu"):
+    def __init__(self, in_f, out_f, act="leakyrelu", inject_noise=False):
         super().__init__()
         self.projection = None
         if in_f != out_f:
-            self.projection = ConvBlock(in_f, out_f, act=act)
+            self.projection = ConvBlock(
+                in_f, out_f, act=act, inject_noise=inject_noise)
         self.conv_block = nn.Sequential(
-            ConvBlock(out_f, out_f, act=act), ConvBlock(out_f, out_f, act="linear"))
+            ConvBlock(out_f, out_f, act=act, inject_noise=inject_noise), ConvBlock(out_f, out_f, act="linear"))
         self.act = nn.LeakyReLU(
             0.2, inplace=True) if act == "leakyrelu" else nn.ReLU(inplace=True)
 
@@ -81,7 +82,7 @@ class ConvBlock(nn.Module):
     NotImplementedError
     """
 
-    def __init__(self, in_f, out_f, kernel_size=3, stride=1, dropout=False, use_bn=True, act="leakyrelu", padding=1, n_blocks=1):
+    def __init__(self, in_f, out_f, kernel_size=3, stride=1, dropout=False, use_bn=True, act="leakyrelu", padding=1, n_blocks=1, inject_noise=False):
         """ConvBlocks Constructor"""
         super(ConvBlock, self).__init__()
 
@@ -94,8 +95,8 @@ class ConvBlock(nn.Module):
                 nn.Conv2d(in_f if i == 0 else out_f, out_f, kernel_size, stride=stride, padding=padding, bias=not use_bn))
             if use_bn:
                 # self.conv_block.append(nn.BatchNorm2d(out_f, 0.8))
-                # self.conv_block.append(nn.BatchNorm2d(out_f, momentum=0.8))
-                self.conv_block.append(nn.BatchNorm2d(out_f))
+                self.conv_block.append(nn.BatchNorm2d(out_f, momentum=0.8))
+                # self.conv_block.append(nn.BatchNorm2d(out_f))
 
             if act == "leakyrelu":
                 self.conv_block.append(nn.LeakyReLU(0.2, inplace=True))
@@ -113,6 +114,9 @@ class ConvBlock(nn.Module):
 
             if dropout:
                 self.conv_block.append(nn.Dropout2d(0.25))
+
+            if inject_noise:
+                self.conv_block.append(NoiseLayer(out_f))
 
     def forward(self, x):
         for layer in self.conv_block:
