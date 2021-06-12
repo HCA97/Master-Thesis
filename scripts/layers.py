@@ -1,4 +1,31 @@
 import torch.nn as nn
+import torch as th
+
+
+class NoiseLayer(nn.Module):
+    """adds noise. noise is per pixel (constant over channels) with per-channel weight
+
+    References
+    ----------
+    https://github.com/huangzh13/StyleGAN.pytorch/blob/bce838ecfa34d4de69429af4f7e028b63e52c3fe/models/CustomLayers.py#L183
+    """
+
+    def __init__(self, channels):
+        super().__init__()
+        self.weight = nn.Parameter(torch.zeros(channels))
+        self.noise = None
+
+    def forward(self, x, noise=None):
+        if noise is None and self.noise is None:
+            noise = th.randn(x.size(0), 1, x.size(
+                2), x.size(3), device=x.device, dtype=x.dtype)
+        elif noise is None:
+            # here is a little trick: if you get all the noise layers and set each
+            # modules .noise attribute, you can have pre-defined noise.
+            # Very useful for analysis
+            noise = self.noise
+        x = x + self.weight.view(1, -1, 1, 1) * noise
+        return x
 
 
 class ResBlock(nn.Module):
@@ -71,8 +98,8 @@ class ConvBlock(nn.Module):
                 self.conv_block.append(nn.BatchNorm2d(out_f))
 
             if act == "leakyrelu":
-                # self.conv_block.append(nn.LeakyReLU(0.2, inplace=True))
-                self.conv_block.append(nn.LeakyReLU(inplace=True))
+                self.conv_block.append(nn.LeakyReLU(0.2, inplace=True))
+                # self.conv_block.append(nn.LeakyReLU(inplace=True))
             elif act == "relu":
                 self.conv_block.append(nn.ReLU(inplace=True))
             elif act == "tanh":

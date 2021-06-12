@@ -1,16 +1,32 @@
 from typing import List, Optional, Tuple
 
 import torch as th
+import numpy as np
 from pytorch_lightning import Callback, LightningModule, Trainer
 from torch import Tensor
 
-from .utility import interpolate, fid, vgg16_get_activation_maps
+from .utility import interpolate, fid_score, vgg16_get_activation_maps
 
 _TORCHVISION_AVAILABLE = True
 try:
     import torchvision
 except ImportError:
     _TORCHVISION_AVAILABLE = False
+
+
+class MyEarlyStopping(Callback):
+    def __init__(self, epoch=300, threshold=5, monitor="fid", mode="min"):
+        super().__init__()
+        self.threshold = threshold
+        self.epoch = epoch
+        self.monitor = monitor
+        self.mode = np.less if mode == "min" else np.greater
+
+    def on_epoch_end(self, trainer, pl_module):
+        monitor_val = trainer.callback_metrics.get(self.monitor)
+        if monitor_val:
+            if (trainer.current_epoch + 1) >= self.epoch and self.mode(self.threshold, monitor_val.item()):
+                raise KeyboardInterrupt("Interrupted by my early stopping")
 
 
 class Pix2PixCallback(Callback):
@@ -110,23 +126,19 @@ class LatentDimInterpolator(Callback):
 
     def on_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
 
-        if pl_module.hparams.gen_model in ["unet", "refiner"]:
-            raise AttributeError(
-                "This callback only for `basic` and `resnet` models.")
-
         if (trainer.current_epoch + 1) % self.interpolate_epoch_interval == 0 or trainer.current_epoch == 0:
+            if pl_module.hparams.gen_model not in ["unet", "refiner"]:
+                images = self.interpolate_latent_space(pl_module)
+                # images = th.cat(images, dim=0)  # type: ignore[assignment]
 
-            images = self.interpolate_latent_space(pl_module)
-            # images = th.cat(images, dim=0)  # type: ignore[assignment]
+                num_rows = self.steps + 2
+                grid = torchvision.utils.make_grid(
+                    images, nrow=num_rows, normalize=self.normalize)
+                str_title = f'{pl_module.__class__.__name__}_latent_space'
+                trainer.logger.experiment.add_image(
+                    str_title, grid, global_step=trainer.current_epoch)
 
-            num_rows = self.steps + 2
-            grid = torchvision.utils.make_grid(
-                images, nrow=num_rows, normalize=self.normalize)
-            str_title = f'{pl_module.__class__.__name__}_latent_space'
-            trainer.logger.experiment.add_image(
-                str_title, grid, global_step=trainer.current_epoch)
-
-    def interpolate_latent_space(self, pl_module: LightningModule) -> List[Tensor]:
+    def interpolate_latent_space(self, pl_module: LightningModule, truncation: float = 1) -> List[Tensor]:
         images = []
         latent_dim = pl_module.generator.latent_dim
 
@@ -136,17 +148,26 @@ class LatentDimInterpolator(Callback):
             if not self.init_noise:
                 self.init_noise = True
                 self.z1 = th.normal(
-                    mean=0, std=1, size=(self.num_samples, latent_dim), device=pl_module.device)
-                self.z2 = th.normal(mean=0, std=1, size=(
+                    mean=0, std=truncation, size=(self.num_samples, latent_dim), device=pl_module.device)
+                self.z2 = th.normal(mean=0, std=truncation, size=(
                     self.num_samples, latent_dim), device=pl_module.device)
 
             z1 = self.z1.clone().detach()
             z2 = self.z2.clone().detach()
 
+            ratios = th.linspace(0, 1, steps=self.steps)
+
             for i in range(self.num_samples):
                 # interpolate points
-                points = interpolate(z1[i], z2[i], self.steps, self.use_slerp)
-                points = points.view(points.shape[0], latent_dim, 1, 1)
+                points = th.zeros(
+                    (self.steps + 2, latent_dim), device=pl_module.device)
+
+                points[0] = z1[i]
+                points[-1] = z2[i]
+
+                for j in range(self.steps):
+                    points[j+1] = interpolate(z1[i],
+                                              z2[i], ratios[j], self.use_slerp)
 
                 # generate images
                 fake_imgs = pl_module(points)
@@ -211,31 +232,28 @@ class TensorboardGeneratorSampler(Callback):
 
     def on_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
 
-        if pl_module.hparams.gen_model in ["unet", "refiner"]:
-            raise AttributeError(
-                "This callback only for `basic` and `resnet` models but ")
-
         if (trainer.current_epoch + 1) % self.epoch_interval == 0 or trainer.current_epoch == 0:
-            dim = (self.num_samples, pl_module.generator.latent_dim, 1, 1)
-            if self.z is None:
-                self.z = th.normal(mean=0.0, std=1.0, size=dim,
-                                   device=pl_module.device)
+            if pl_module.hparams.gen_model not in ["unet", "refiner"]:
+                dim = (self.num_samples, pl_module.generator.latent_dim, 1, 1)
+                if self.z is None:
+                    self.z = th.normal(mean=0.0, std=1.0, size=dim,
+                                       device=pl_module.device)
 
-            # generate images
-            with th.no_grad():
-                pl_module.eval()
-                images = pl_module(self.z)
-                pl_module.train()
+                # generate images
+                with th.no_grad():
+                    pl_module.eval()
+                    images = pl_module(self.z)
+                    pl_module.train()
 
-            grid = torchvision.utils.make_grid(
-                tensor=images,
-                nrow=self.nrow,
-                padding=self.padding,
-                normalize=self.normalize,
-                range=self.norm_range,
-                scale_each=self.scale_each,
-                pad_value=self.pad_value,
-            )
-            str_title = f"{pl_module.__class__.__name__}_images"
-            trainer.logger.experiment.add_image(
-                str_title, grid, global_step=trainer.current_epoch)
+                grid = torchvision.utils.make_grid(
+                    tensor=images,
+                    nrow=self.nrow,
+                    padding=self.padding,
+                    normalize=self.normalize,
+                    range=self.norm_range,
+                    scale_each=self.scale_each,
+                    pad_value=self.pad_value,
+                )
+                str_title = f"{pl_module.__class__.__name__}_images"
+                trainer.logger.experiment.add_image(
+                    str_title, grid, global_step=trainer.current_epoch)

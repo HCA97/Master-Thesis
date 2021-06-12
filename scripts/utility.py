@@ -4,6 +4,7 @@ import numpy as np
 from scipy.linalg import sqrtm
 import torch as th
 import torchvision
+import lpips
 
 
 def weights_init_normal(m):
@@ -19,39 +20,49 @@ def weights_init_normal(m):
         th.nn.init.constant_(m.bias.data, 0.0)
 
 
-def interpolate(p1: th.Tensor, p2: th.Tensor, steps: int, use_slerp: bool) -> th.Tensor:
-    """Interpolation of two latent points.
+# def interpolate(p1: th.Tensor, p2: th.Tensor, steps: int, use_slerp: bool) -> th.Tensor:
+#     """Interpolation of two latent points.
 
-    References
-    ----------
-    https://en.wikipedia.org/wiki/Slerp
-    https://machinelearningmastery.com/how-to-interpolate-and-perform-vector-arithmetic-with-faces-using-a-generative-adversarial-network/
-    """
+#     References
+#     ----------
+#     https://en.wikipedia.org/wiki/Slerp
+#     https://machinelearningmastery.com/how-to-interpolate-and-perform-vector-arithmetic-with-faces-using-a-generative-adversarial-network/
+#     """
+
+#     if p1.device != p2.device:
+#         raise RuntimeError("p1 and p2 uses different devices.")
+
+#     points = th.zeros((steps + 2, len(p1)), device=p1.device)
+#     ratios = th.linspace(0, 1, steps=steps)
+
+#     points[0] = p1
+#     points[-1] = p2
+
+#     for i, ratio in enumerate(ratios):
+#         points[i+1] = interpolate_(p1, p2, ratio, use_slerp)
+#     return points
+
+
+def interpolate(p1: th.Tensor, p2: th.Tensor, ratio: float, use_slerp: bool) -> th.Tensor:
+    # linear interpolation if omega -> 0 than it behaves like linear interpolation
 
     if p1.device != p2.device:
         raise RuntimeError("p1 and p2 uses different devices.")
+    if 0 > ratio or ratio > 1:
+        raise RuntimeError("Ratio must be between [0, 1]")
 
-    points = th.zeros((steps + 2, len(p1)), device=p1.device)
-    ratios = th.linspace(0, 1, steps=steps)
+    noise = (1 - ratio) * p1 + ratio * p2
 
-    points[0] = p1
-    points[-1] = p2
+    if use_slerp:
+        p1_ = p1/(th.linalg.norm(p1) + 1e-10)
+        p2_ = p2/(th.linalg.norm(p2) + 1e-10)
 
-    for i, ratio in enumerate(ratios):
-        # linear interpolation if omega -> 0 than it behaves like linear interpolation
-        noise = (1 - ratio) * p1 + ratio * p2
+        omega = th.acos(th.clip(th.dot(p1_, p2_), -1, 1))
+        if not th.isclose(th.sin(omega), th.zeros(1, device=p1.device)):
+            noise = (th.sin((1 - ratio)*omega) * p1 +
+                     th.sin(ratio*omega) * p2) / th.sin(omega)
 
-        if use_slerp:
-            p1_ = p1/(th.linalg.norm(p1) + 1e-10)
-            p2_ = p2/(th.linalg.norm(p2) + 1e-10)
-
-            omega = th.acos(th.clip(th.dot(p1_, p2_), -1, 1))
-            if not th.isclose(th.sin(omega), th.zeros(1, device=p1.device)):
-                noise = (th.sin((1 - ratio)*omega) * p1 +
-                         th.sin(ratio*omega) * p2) / th.sin(omega)
-
-        points[i+1] = noise
-    return points
+    return noise
 
 
 @th.no_grad()
@@ -79,10 +90,17 @@ def vgg16_get_activation_maps(imgs: th.Tensor,
     th.Tensor
         activation maps
     """
-    vgg16 = torchvision.models.vgg16(pretrained=True).to(
-        device) if not use_bn else torchvision.models.vgg16_bn(pretrained=True).to(device)
-    vgg16.eval()
-    features = vgg16.features
+    # vgg16 = torchvision.models.vgg16(pretrained=True).to(
+    #     device) if not use_bn else torchvision.models.vgg16_bn(pretrained=True).to(device)
+    # vgg16.eval()
+    # features = vgg16.features
+
+    features = torchvision.models.vgg16(pretrained=True).features.to(
+        device) if not use_bn else torchvision.models.vgg16_bn(pretrained=True).features.to(device)
+    features.eval()
+
+    # for param in features.parameters():
+    #     param.requires_grad = False
 
     # normalize imgs for VGG-16:
     min_, max_ = normalize_range
@@ -99,9 +117,68 @@ def vgg16_get_activation_maps(imgs: th.Tensor,
     if global_pooling:
         x = th.nn.AdaptiveMaxPool2d(1)(x)
 
-    # del vgg16, features, imgs_norm, imgs
-
     return x.detach().cpu().clone()
+
+
+@th.no_grad()
+def perceptual_path_length(generator, n_samples=1024, epsilon=1e-4, use_slerp=True, device="cpu", truncation=1):
+    """[summary]
+
+    Parameters
+    ----------
+    generator : [type]
+        [description]
+    n_samples : int, optional
+        [description], by default 1024
+    epsilon : [type], optional
+        [description], by default 1e-4
+    use_slerp : bool, optional
+        [description], by default True
+    device : str, optional
+        [description], by default "cpu"
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
+    # def slerp(a, b, t):
+    #     a = a / a.norm(dim=-1, keepdim=True)
+    #     b = b / b.norm(dim=-1, keepdim=True)
+    #     d = (a * b).sum(dim=-1, keepdim=True)
+    #     p = t * th.acos(d)
+    #     c = b - d * a
+    #     c = c / c.norm(dim=-1, keepdim=True)
+    #     d = a * th.cos(p) + c * th.sin(p)
+    #     d = d / d.norm(dim=-1, keepdim=True)
+    #     return d
+    z1 = th.zeros(size=(n_samples, generator.latent_dim),
+                  device=device)
+    z2 = th.zeros(size=(n_samples, generator.latent_dim),
+                  device=device)
+
+    # point between z1 and z2
+    for i in range(n_samples):
+        z1_ = th.normal(0, truncation, size=(generator.latent_dim,),
+                        device=device)
+        z2_ = th.normal(0, truncation, size=(generator.latent_dim,),
+                        device=device)
+
+        ratio = np.random.uniform(0, 1)
+        z1[i, :] = interpolate(z1_, z2_, ratio=ratio, use_slerp=use_slerp)
+        z2[i, :] = interpolate(z1_, z2_, ratio=min(
+            ratio + epsilon, 1), use_slerp=use_slerp)
+
+    # create images
+    imgs1 = generator(z1)
+    imgs2 = generator(z2)
+
+    # compute lpips
+    loss_fn_vgg = lpips.LPIPS(net='vgg')
+    d = loss_fn_vgg(imgs1, imgs2, normalize=True)
+
+    # return mean lpips
+    return th.mean(d).item() / epsilon**2
 
 
 def fid_score(imgs1: th.Tensor,
@@ -183,3 +260,17 @@ def fid_score(imgs1: th.Tensor,
     # calculate score
     fid = ssdiff + np.trace(sigma1 + sigma2 - 2.0 * covmean)
     return fid
+
+
+if __name__ == "__main__":
+    z1_ = th.normal(0, 1, size=(100,),
+                    device="cpu")
+    z2_ = th.normal(0, 1, size=(100,),
+                    device="cpu")
+
+    ratio = np.random.uniform(0, 1)
+    # z1 = slerp(z1_, z2_, t=ratio)
+    # z2 = slerp(z1_, z2_, t=1 - ratio)
+    z1 = interpolate(z1_, z2_, ratio, True)
+    z2 = interpolate(z2_, z1_, 1 - ratio, True)
+    print(th.allclose(z1, z2))
