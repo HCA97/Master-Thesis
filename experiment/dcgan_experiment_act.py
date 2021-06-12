@@ -45,10 +45,14 @@ for generator_param in generator_params:
         EarlyStopping(monitor="fid", patience=10*interval, mode="min"),
         Pix2PixCallback(epoch_interval=interval),
         ShowWeights(),
-        MyEarlyStopping(300, max_fid=5)
+        MyEarlyStopping(300, threshold=5, monitor="fid", mode="min")
     ]
 
     # Apparently Trainer has logger by default
     trainer = pl.Trainer(default_root_dir=results_dir, gpus=1, max_epochs=max_epochs,
                          callbacks=callbacks, progress_bar_refresh_rate=20)
     trainer.fit(model, datamodule=potsdam)
+
+file_name = os.path.basename(__file__)
+copyfile(os.path.join("experiment", file_name),
+         os.path.join(results_dir, file_name))
