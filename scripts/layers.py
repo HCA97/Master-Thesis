@@ -82,7 +82,7 @@ class ConvBlock(nn.Module):
     NotImplementedError
     """
 
-    def __init__(self, in_f, out_f, kernel_size=3, stride=1, dropout=False, use_bn=True, act="leakyrelu", padding=1, n_blocks=1, inject_noise=False):
+    def __init__(self, in_f, out_f, kernel_size=3, stride=1, dropout=False, use_bn=True, act="leakyrelu", padding=1, n_blocks=1, inject_noise=False, bn_mode="epsilon"):
         """ConvBlocks Constructor"""
         super(ConvBlock, self).__init__()
 
@@ -94,9 +94,12 @@ class ConvBlock(nn.Module):
             self.conv_block.append(
                 nn.Conv2d(in_f if i == 0 else out_f, out_f, kernel_size, stride=stride, padding=padding, bias=not use_bn))
             if use_bn:
-                self.conv_block.append(nn.BatchNorm2d(out_f, eps=0.8))
-                # self.conv_block.append(nn.BatchNorm2d(out_f, momentum=0.8))
-                # self.conv_block.append(nn.BatchNorm2d(out_f))
+                if bn_mode == "epsilon":
+                    self.conv_block.append(nn.BatchNorm2d(out_f, eps=0.8))
+                elif bn_mode == "momentum":
+                    self.conv_block.append(nn.BatchNorm2d(out_f, momentum=0.8))
+                else:
+                    self.conv_block.append(nn.BatchNorm2d(out_f))
 
             if act == "leakyrelu":
                 self.conv_block.append(nn.LeakyReLU(0.2, inplace=True))

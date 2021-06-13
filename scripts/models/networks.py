@@ -29,7 +29,7 @@ class BasicDiscriminator(nn.Module):
     UNSUPERVISED REPRESENTATION LEARNING WITH DEEP CONVOLUTIONAL GENERATIVE ADVERSARIAL NETWORKS.
     """
 
-    def __init__(self, img_size, base_channels=16, n_layers=4, heat_map=False, padding=1):
+    def __init__(self, img_size, base_channels=16, n_layers=4, heat_map=False, padding=1, bn_mode="old", use_bn_first_conv=False):
         super().__init__()
 
         self.heat_map = heat_map
@@ -37,10 +37,10 @@ class BasicDiscriminator(nn.Module):
         input_channels, input_height, input_width = img_size
 
         layers = [ConvBlock(input_channels, base_channels, stride=2,
-                            dropout=True, use_bn=False)]
+                            dropout=True, use_bn=use_bn_first_conv, bn_mode=bn_mode)]
         for i in range(1, n_layers):
             layers.append(ConvBlock(base_channels*2**(i-1), base_channels*2**i, stride=2, padding=padding,
-                          dropout=True))
+                          dropout=True, bn_mode=bn_mode))
 
         self.conv_blocks = nn.Sequential(*layers)
         if self.heat_map:
@@ -72,7 +72,7 @@ class BasicDiscriminator(nn.Module):
 
 class UnetGenerator(nn.Module):
 
-    def __init__(self, n_channels=3, init_channels=64, n_layers=4, n_blocks=2, act="relu", **kwargs):
+    def __init__(self, n_channels=3, init_channels=64, n_layers=4, n_blocks=2, act="relu", bn_mode="old", **kwargs):
         super().__init__()
 
         if n_layers < 2:
@@ -81,27 +81,28 @@ class UnetGenerator(nn.Module):
         # down part
         self.down = nn.ModuleList()
         self.down.append(
-            ConvBlock(n_channels, init_channels, n_blocks=n_blocks))
+            ConvBlock(n_channels, init_channels, n_blocks=n_blocks, bn_mode=bn_mode))
         for i in range(1, n_layers-1):
             self.down.append(
-                ConvBlock(2**(i-1) * init_channels, 2**i * init_channels, n_blocks=n_blocks, act=act))
+                ConvBlock(2**(i-1) * init_channels, 2**i * init_channels, n_blocks=n_blocks, act=act, bn_mode=bn_mode))
 
         # bottleneck
         self.bottle_neck = ConvBlock(
-            2**(n_layers-2) * init_channels, 2**(n_layers-1) * init_channels, n_blocks=n_blocks, act=act)
+            2**(n_layers-2) * init_channels, 2**(n_layers-1) * init_channels, n_blocks=n_blocks, act=act, bn_mode=bn_mode)
 
         # up part
         self.up = nn.ModuleList()
         for i in range(n_layers-1, 0, -1):
             block = nn.Sequential(
                 ConvBlock((2**(i - 1) + 2**i)*init_channels,
-                          2**(i-1) * init_channels, kernel_size=1, padding=0, act=act),
+                          2**(i-1) * init_channels, kernel_size=1, padding=0, act=act, bn_mode=bn_mode),
                 ConvBlock(2**(i-1) * init_channels, 2**(i-1)
-                          * init_channels, n_blocks=n_blocks, act=act)
+                          * init_channels, n_blocks=n_blocks, act=act, bn_mode=bn_mode)
             )
             self.up.append(block)
 
-        self.final = ConvBlock(init_channels, 3, use_bn=False, act="tanh")
+        self.final = ConvBlock(
+            init_channels, 3, use_bn=False, act="tanh", bn_mode=bn_mode)
 
     def forward(self, x_in):
 
@@ -126,7 +127,7 @@ class UnetGenerator(nn.Module):
 
 
 class ResNetGenerator(nn.Module):
-    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=4, learn_upsample=False, act="relu", n_blocks=1, **kwargs):
+    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=4, learn_upsample=False, act="relu", n_blocks=1, bn_mode="old", ** kwargs):
         super().__init__()
 
         input_channels, input_height, input_width = img_size
@@ -149,26 +150,26 @@ class ResNetGenerator(nn.Module):
                   nn.Upsample(scale_factor=2)]
         if learn_upsample:
             layers.append(ConvBlock(self.init_channels,
-                          self.init_channels, kernel_size=1, padding=0, act=act))
+                          self.init_channels, kernel_size=1, padding=0, act=act, bn_mode=bn_mode))
         for n in range(n_blocks):
             layers.append(ResBlock(self.init_channels,
-                          self.init_channels, act=act))
+                          self.init_channels, act=act, bn_mode=bn_mode))
 
         # middle layer
         for i in range(1, n_layers):
             layers.append(nn.Upsample(scale_factor=2))
             if learn_upsample:
                 layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
-                                        self.init_channels // 2 ** (i-1), kernel_size=1, padding=0, act=act))
+                                        self.init_channels // 2 ** (i-1), kernel_size=1, padding=0, act=act, bn_mode=bn_mode))
             layers.append(ResBlock(self.init_channels // 2 ** (i-1),
-                                   self.init_channels // 2 ** i, act=act))
+                                   self.init_channels // 2 ** i, act=act, bn_mode=bn_mode))
             for n in range(1, n_blocks):
                 layers.append(ResBlock(self.init_channels // 2 ** i,
-                                       self.init_channels // 2 ** i, act=act))
+                                       self.init_channels // 2 ** i, act=act, bn_mode=bn_mode))
 
         # last layer
         layers.append(ConvBlock(self.init_channels // 2**(n_layers - 1),
-                      input_channels, use_bn=False, act="tanh"))
+                      input_channels, use_bn=False, act="tanh", bn_mode=bn_mode))
 
         self.conv_blocks = nn.Sequential(*layers)
 
@@ -198,7 +199,7 @@ class BasicGenerator(nn.Module):
     UNSUPERVISED REPRESENTATION LEARNING WITH DEEP CONVOLUTIONAL GENERATIVE ADVERSARIAL NETWORKS.
     """
 
-    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=2, act="leakyrelu", learn_upsample=False, inject_noise_conv=False, **kwargs):
+    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=2, act="leakyrelu", learn_upsample=False, inject_noise_conv=False, bn_mode="old", **kwargs):
         super().__init__()
 
         input_channels, input_height, input_width = img_size
@@ -221,9 +222,9 @@ class BasicGenerator(nn.Module):
                   nn.Upsample(scale_factor=2)]
         if learn_upsample:
             layers.append(ConvBlock(self.init_channels,
-                          self.init_channels, kernel_size=1, act=act))
+                          self.init_channels, kernel_size=1, act=act, bn_mode=bn_mode))
         layers.append(ConvBlock(self.init_channels,
-                      self.init_channels, act=act))
+                      self.init_channels, act=act, bn_mode=bn_mode))
 
         # middle layer
         for i in range(1, n_layers):
@@ -231,14 +232,14 @@ class BasicGenerator(nn.Module):
             if learn_upsample:
                 layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
                                         self.init_channels // 2 ** (i-1),
-                                        kernel_size=1, padding=0, act=act))
+                                        kernel_size=1, padding=0, act=act, bn_mode=bn_mode))
             layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
                                     self.init_channels // 2 ** i,
-                                    act=act))
+                                    act=act, bn_mode=bn_mode))
 
         # last layer
         layers.append(ConvBlock(self.init_channels // 2**(n_layers-1),
-                      input_channels, use_bn=False, act="tanh"))
+                      input_channels, use_bn=False, act="tanh", bn_mode=bn_mode))
 
         self.conv_blocks = nn.Sequential(*layers)
 
