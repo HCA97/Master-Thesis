@@ -24,7 +24,7 @@ discriminator_params = [{"base_channels": 32, "n_layers": 4, "bn_mode": "old"},
 
 img_dim = (3, 32, 64)
 batch_size = 64
-max_epochs = 1
+max_epochs = 1000
 interval = 25
 
 data_dir = "/scratch/s7hialtu/potsdam_cars"
