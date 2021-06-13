@@ -16,7 +16,7 @@ hue = [-0.1, 0.1]
 
 # POTSDAM CARS
 generator_params = {"n_layers": 4, "init_channels": 512}
-discriminator_params = {"base_channels": 32, "n_layers": 4, "heat_map": False}
+discriminator_params = {"base_channels": 32, "n_layers": 4}
 use_gp = False
 img_dim = (3, 32, 64)
 
@@ -55,7 +55,9 @@ dataaug = [
 
 
 batch_size = 64
-max_epochs = 500
+max_epochs = 1000
+interval = 25
+
 data_dir = "/scratch/s7hialtu/potsdam_cars"
 results_dir = "/scratch/s7hialtu/dcgan_bigger/dataaug"
 
@@ -67,10 +69,14 @@ for transform in dataaug:
     # call backs
     callbacks = [
         TensorboardGeneratorSampler(
-            epoch_interval=25, num_samples=batch_size, normalize=True),
-        LatentDimInterpolator(interpolate_epoch_interval=25, num_samples=10),
-        ModelCheckpoint(period=25,
-                        save_top_k=-1, filename="{epoch}")
+            epoch_interval=interval, num_samples=batch_size, normalize=True),
+        LatentDimInterpolator(
+            interpolate_epoch_interval=interval, num_samples=10),
+        ModelCheckpoint(period=interval, save_top_k=-1, filename="{epoch}"),
+        EarlyStopping(monitor="fid", patience=10*interval, mode="min"),
+        Pix2PixCallback(epoch_interval=interval),
+        ShowWeights(),
+        MyEarlyStopping(300, threshold=5, monitor="fid", mode="min")
     ]
 
     # dataset
