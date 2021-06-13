@@ -198,7 +198,7 @@ class BasicGenerator(nn.Module):
     UNSUPERVISED REPRESENTATION LEARNING WITH DEEP CONVOLUTIONAL GENERATIVE ADVERSARIAL NETWORKS.
     """
 
-    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=2, act="leakyrelu", learn_upsample=False, **kwargs):
+    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=2, act="leakyrelu", learn_upsample=False, inject_noise_conv=False, **kwargs):
         super().__init__()
 
         input_channels, input_height, input_width = img_size

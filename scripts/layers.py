@@ -94,8 +94,8 @@ class ConvBlock(nn.Module):
             self.conv_block.append(
                 nn.Conv2d(in_f if i == 0 else out_f, out_f, kernel_size, stride=stride, padding=padding, bias=not use_bn))
             if use_bn:
-                # self.conv_block.append(nn.BatchNorm2d(out_f, 0.8))
-                self.conv_block.append(nn.BatchNorm2d(out_f, momentum=0.8))
+                self.conv_block.append(nn.BatchNorm2d(out_f, eps=0.8))
+                # self.conv_block.append(nn.BatchNorm2d(out_f, momentum=0.8))
                 # self.conv_block.append(nn.BatchNorm2d(out_f))
 
             if act == "leakyrelu":
