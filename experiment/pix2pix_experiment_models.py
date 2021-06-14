@@ -15,9 +15,14 @@ from scripts.callbacks import *
 generator_params = [("unet", {"n_layers": 4, "init_channels": 64, "act": "leakyrelu",
                     "bn_mode": "default", "n_blocks": 2, "reconstruction": True}),
                     ("refiner", {"n_layers": 4, "init_channels": 256, "act": "leakyrelu",
-                                 "bn_mode": "default", "n_layers": 4, "reconstruction": True})]
-discriminator_params = {"base_channels": 32,
-                        "n_layers": 4, "bn_mode": "default"}
+                                 "bn_mode": "default", "n_layers": 4, "reconstruction": True}),
+                    ("unet", {"n_layers": 4, "init_channels": 64, "act": "leakyrelu",
+                              "bn_mode": "default", "n_blocks": 2, "reconstruction": False}),
+                    ("refiner", {"n_layers": 4, "init_channels": 256, "act": "leakyrelu",
+                                 "bn_mode": "default", "n_layers": 4, "reconstruction": False})]
+discriminator_params = [{"base_channels": 32, "n_layers": 4, "bn_mode": "default"},
+                        {"base_channels": 32, "n_layers": 4, "bn_mode": "default", "heat_map": True}]
+
 beta = 1e-4
 
 img_dim = (3, 32, 64)
@@ -34,33 +39,50 @@ if not os.path.isdir(data_dir1):
     data_dir2 = "../potsdam_data/artificial_cars"
     results_dir = "logs"
 
+# DATA AUG FOR
+transform1 = transforms.Compose([transforms.Resize(img_dim[1:]),
+                                transforms.ToTensor(),
+                                transforms.RandomHorizontalFlip(p=0.5),
+                                transforms.RandomVerticalFlip(p=0.5),
+                                transforms.ColorJitter(hue=[-0.1, 0.1]),
+                                transforms.Normalize([0.5], [0.5])])
+transform2 = transforms.Compose([transforms.Resize(img_dim[1:]),
+                                 transforms.ToTensor(),
+                                 transforms.RandomHorizontalFlip(p=0.5),
+                                 transforms.RandomVerticalFlip(p=0.5),
+                                 transforms.Normalize([0.5], [0.5])])
+
+
 for gen_model, generator_param in generator_params:
-    model = GAN(img_dim, discriminator_params=discriminator_params, fid_interval=interval,
-                generator_params=generator_param, gen_model=gen_model, beta=beta)
+    for discriminator_param in discriminator_params:
+        model = GAN(img_dim, discriminator_params=discriminator_param, fid_interval=interval,
+                    generator_params=generator_param, gen_model=gen_model, beta=beta)
 
-    potsdam = PostdamCarsDataModule(
-        data_dir1, img_size=img_dim[1:], batch_size=batch_size, data_dir2=data_dir2)
-    potsdam.setup()
+        potsdam = PostdamCarsDataModule(
+            data_dir1, img_size=img_dim[1:], batch_size=batch_size,
+            data_dir2=data_dir2, transform=transform1, transform2=transform2)
+        potsdam.setup()
 
-    callbacks = [
-        TensorboardGeneratorSampler(
-            epoch_interval=interval, num_samples=batch_size, normalize=True),
-        LatentDimInterpolator(
-            interpolate_epoch_interval=interval, num_samples=10),
-        ModelCheckpoint(period=interval, save_top_k=-1, filename="{epoch}"),
-        EarlyStopping(monitor="fid", patience=20*interval, mode="min"),
-        Pix2PixCallback(epoch_interval=interval),
-        ShowWeights(),
-        MyEarlyStopping(300, threshold=5, monitor="fid", mode="min")
-    ]
+        callbacks = [
+            TensorboardGeneratorSampler(
+                epoch_interval=interval, num_samples=batch_size, normalize=True),
+            LatentDimInterpolator(
+                interpolate_epoch_interval=interval, num_samples=10),
+            ModelCheckpoint(period=interval, save_top_k=-
+                            1, filename="{epoch}"),
+            EarlyStopping(monitor="fid", patience=20*interval, mode="min"),
+            Pix2PixCallback(epoch_interval=interval, n_samples=10),
+            ShowWeights(),
+            MyEarlyStopping(300, threshold=5, monitor="fid", mode="min")
+        ]
 
-    # Apparently Trainer has logger by default
-    trainer = pl.Trainer(default_root_dir=results_dir, gpus=1, max_epochs=max_epochs,
-                         callbacks=callbacks, progress_bar_refresh_rate=20)
-    try:
-        trainer.fit(model, datamodule=potsdam)
-    except KeyboardInterrupt:
-        pass
+        # Apparently Trainer has logger by default
+        trainer = pl.Trainer(default_root_dir=results_dir, gpus=1, max_epochs=max_epochs,
+                             callbacks=callbacks, progress_bar_refresh_rate=20)
+        try:
+            trainer.fit(model, datamodule=potsdam)
+        except KeyboardInterrupt:
+            pass
 
 file_name = os.path.basename(__file__)
 copyfile(os.path.join("experiment", file_name),
