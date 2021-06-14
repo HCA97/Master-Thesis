@@ -43,6 +43,9 @@ class GAN(pl.LightningModule):
         self.discriminator = self.get_discriminator(discriminator_params)
         self.criterion = self.get_criterion()
 
+        # TODO WEIGHT AVERAGIN FOR GEN
+        # TODO BUFFER FOR DISC
+
         # ingerating FID score
         self.n_samples = 1024
         self.act_real = []

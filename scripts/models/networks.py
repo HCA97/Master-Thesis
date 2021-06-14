@@ -160,7 +160,19 @@ class UnetGenerator(nn.Module):
 
 
 class ResNetGenerator(nn.Module):
-    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=4, learn_upsample=False, act="relu", n_blocks=1, bn_mode="old", inject_noise=False, **kwargs):
+    def __init__(self,
+                 img_size,
+                 latent_dim=100,
+                 init_channels=128,
+                 n_layers=4,
+                 learn_upsample=False,
+                 act="relu",
+                 n_blocks=1,
+                 bn_mode="old",
+                 inject_noise=False,
+                 learn_latent=False,
+                 use_bn_latent=True,
+                 **kwargs):
         super().__init__()
 
         input_channels, input_height, input_width = img_size
@@ -174,6 +186,11 @@ class ResNetGenerator(nn.Module):
         self.init_width = input_width // scale_factor
         self.latent_dim = latent_dim
         self.init_channels = init_channels
+        self.learn_latent = learn_latent
+
+        if self.learn_latent:
+            self.w = LinearLayer(
+                self.latent_dim, self.latent_dim, use_bn=use_bn_latent, bn_mode=bn_mode, n_blocks=4)
 
         self.l1 = nn.Linear(self.latent_dim, self.init_channels *
                             self.init_width * self.init_height)
@@ -215,6 +232,8 @@ class ResNetGenerator(nn.Module):
 
     def forward(self, z):
         x = z.view(z.shape[0], self.latent_dim)
+        if self.learn_latent:
+            x = self.w(x)
         x = self.l1(x)
         x = x.view(x.shape[0], self.init_channels,
                    self.init_height, self.init_width)
@@ -239,7 +258,18 @@ class BasicGenerator(nn.Module):
     UNSUPERVISED REPRESENTATION LEARNING WITH DEEP CONVOLUTIONAL GENERATIVE ADVERSARIAL NETWORKS.
     """
 
-    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=2, act="leakyrelu", learn_upsample=False, inject_noise=False, bn_mode="old", **kwargs):
+    def __init__(self,
+                 img_size,
+                 latent_dim=100,
+                 init_channels=128,
+                 n_layers=2,
+                 act="leakyrelu",
+                 learn_upsample=False,
+                 inject_noise=False,
+                 bn_mode="old",
+                 learn_latent=False,
+                 use_bn_latent=True,
+                 **kwargs):
         super().__init__()
 
         input_channels, input_height, input_width = img_size
@@ -253,6 +283,11 @@ class BasicGenerator(nn.Module):
         self.init_width = input_width // scale_factor
         self.latent_dim = latent_dim
         self.init_channels = init_channels
+        self.learn_latent = learn_latent
+
+        if self.learn_latent:
+            self.w = LinearLayer(
+                self.latent_dim, self.latent_dim, bn_mode="default", use_bn=use_bn_latent, n_blocks=4)
 
         self.l1 = nn.Linear(self.latent_dim, self.init_channels *
                             self.init_width * self.init_height)
@@ -288,6 +323,8 @@ class BasicGenerator(nn.Module):
 
     def forward(self, z):
         x = z.view(z.shape[0], self.latent_dim)
+        if self.learn_latent:
+            x = self.w(x)
         x = self.l1(x)
         x = x.view(x.shape[0], self.init_channels,
                    self.init_height, self.init_width)
