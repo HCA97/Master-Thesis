@@ -19,12 +19,9 @@ generator_params = [
     ("basic", {"n_layers": 4, "init_channels": 512,
      "bn_mode": "default", "learn_upsample": True, "learn_latent": True}),
     ("basic", {"n_layers": 4, "init_channels": 512,
-               "bn_mode": "default", "learn_upsample": True, "learn_latent": True, "use_bn_latent": False}),
-]
-# ("basic", {"n_layers": 4, "init_channels": 512,
-#            "bn_mode": "default", "learn_upsample": True, "learn_latent": True, "inject_noise": True}),
-# ("resnet", {"n_layers": 4, "init_channels": 512,
-#             "bn_mode": "default", "learn_upsample": True, "learn_latent": True, "inject_noise": True})]
+               "bn_mode": "default", "learn_upsample": True, "learn_latent": True, "inject_noise": True}),
+    ("resnet", {"n_layers": 4, "init_channels": 512,
+                "bn_mode": "default", "learn_upsample": True, "learn_latent": True, "inject_noise": True})]
 
 discriminator_params = [{"base_channels": 32, "n_layers": 4, "bn_mode": "default"},
                         {"base_channels": 32, "n_layers": 4, "bn_mode": "default", "heat_map": True}]
