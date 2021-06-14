@@ -29,14 +29,14 @@ class NoiseLayer(nn.Module):
 
 
 class ResBlock(nn.Module):
-    def __init__(self, in_f, out_f, act="leakyrelu", inject_noise=False):
+    def __init__(self, in_f, out_f, act="leakyrelu", inject_noise=False, bn_mode="old"):
         super().__init__()
         self.projection = None
         if in_f != out_f:
             self.projection = ConvBlock(
-                in_f, out_f, act=act, inject_noise=inject_noise)
+                in_f, out_f, act=act, inject_noise=inject_noise, bn_mode=bn_mode)
         self.conv_block = nn.Sequential(
-            ConvBlock(out_f, out_f, act=act, inject_noise=inject_noise), ConvBlock(out_f, out_f, act="linear"))
+            ConvBlock(out_f, out_f, act=act, inject_noise=inject_noise, bn_mode=bn_mode), ConvBlock(out_f, out_f, act="linear", bn_mode=bn_mode))
         self.act = nn.LeakyReLU(
             0.2, inplace=True) if act == "leakyrelu" else nn.ReLU(inplace=True)
 

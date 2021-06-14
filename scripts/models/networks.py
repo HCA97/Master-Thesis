@@ -71,13 +71,43 @@ class BasicDiscriminator(nn.Module):
 # -------------------------------------------------------- #
 
 
+class RefinerNet(nn.Module):
+    def __init__(self, n_channels=3, init_channels=64, n_layers=4, act="relu", bn_mode="old", reconstruct=False, **kwargs):
+        super().__init__()
+
+        self.reconstruct = reconstruct
+
+        self.reconstruct = reconstruct
+
+        layers = [ResBlock(n_channels, init_channels,
+                           act=act, bn_mode=bn_mode)]
+        for _ in range(n_layers-1):
+            layers.append(
+                ResBlock(init_channels, init_channels, act=act, bn_mode=bn_mode))
+
+        self.conv_blocks = nn.Sequential(*layers)
+        self.final = ConvBlock(
+            init_channels, 3, use_bn=False, act="tanh", bn_mode=bn_mode)
+
+    def forward(self, x_in):
+
+        x = self.conv_blocks(x_in)
+        x = self.final(x)
+
+        if self.reconstruct:
+            return x
+        return x_in + x
+
+
 class UnetGenerator(nn.Module):
 
-    def __init__(self, n_channels=3, init_channels=64, n_layers=4, n_blocks=2, act="relu", bn_mode="old", **kwargs):
+    def __init__(self, n_channels=3, init_channels=64, n_layers=4, n_blocks=2, act="relu", bn_mode="old", reconstruct=False, **kwargs):
         super().__init__()
 
         if n_layers < 2:
             raise AttributeError("Number of layers must be larger than 1.")
+
+        self.reconstruct = reconstruct
 
         # down part
         self.down = nn.ModuleList()
@@ -124,6 +154,8 @@ class UnetGenerator(nn.Module):
             x = layer(x)
 
         x = self.final(x)
+        if self.reconstruct:
+            return x
         return x_in + x
 
 

@@ -33,7 +33,9 @@ class GAN(pl.LightningModule):
                  gen_model="basic",
                  disc_model="basic",
                  fid_interval=5,
-                 use_lr_scheduler=False):
+                 use_lr_scheduler=False,
+                 gen_init="normal",
+                 disc_init="normal"):
         super().__init__()
         self.save_hyperparameters()
 
@@ -64,13 +66,15 @@ class GAN(pl.LightningModule):
         elif self.hparams.gen_model == "basic":
             generator = BasicGenerator(
                 self.hparams.img_dim, **generator_params)
-            generator.apply(weights_init_normal)
+
         elif self.hparams.gen_model == "unet":
             generator = UnetGenerator(
                 n_channels=self.hparams.img_dim[0], **generator_params)
         else:
             raise NotImplementedError()
 
+        if self.hparams.gen_init == "normal":
+            generator.apply(weights_init_normal)
         return generator
 
     def get_discriminator(self, discriminator_params):
@@ -79,10 +83,11 @@ class GAN(pl.LightningModule):
         if self.hparams.disc_model == "basic":
             discriminator = BasicDiscriminator(
                 self.hparams.img_dim, **discriminator_params)
-            discriminator.apply(weights_init_normal)
         else:
             raise NotImplementedError()
 
+        if self.hparams.disc_init == "normal":
+            discriminator.apply(weights_init_normal)
         return discriminator
 
     def configure_optimizers(self):
