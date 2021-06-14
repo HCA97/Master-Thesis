@@ -12,29 +12,33 @@ from scripts.dataloader import *
 from scripts.callbacks import *
 
 # POTSDAM CARS
-generator_params = [{"n_layers": 4, "init_channels": 512, "act": "relu"},
-                    {"n_layers": 4, "init_channels": 512, "act": "leakyrelu"}
-                    ]
-discriminator_params = {"base_channels": 32, "n_layers": 4}
+generator_params = [{"n_layers": 4, "init_channels": 64, "act": "leakyrelu",
+                     "bn_mode": "default", "n_blocks": 1},
+                    {"n_layers": 4, "init_channels": 64,
+                    "act": "leakyrelu", "bn_mode": "default"}]
+discriminator_params = {"base_channels": 32,
+                        "n_layers": 4, "bn_mode": "default"}
 
 img_dim = (3, 32, 64)
 batch_size = 64
 max_epochs = 1000
-interval = 25
+interval = 20
 
-data_dir = "/scratch/s7hialtu/potsdam_cars"
-results_dir = "/scratch/s7hialtu/dcgan_act"
+data_dir1 = "/scratch/s7hialtu/potsdam_cars"
+data_dir2 = "/scratch/s7hialtu/artificial_cars"
+results_dir = "/scratch/s7hialtu/pix2pix_unet"
 
-if not os.path.isdir(data_dir):
-    data_dir = "../potsdam_data/potsdam_cars"
+if not os.path.isdir(data_dir1):
+    data_dir1 = "../potsdam_data/potsdam_cars"
+    data_dir2 = "../potsdam_data/artificial_cars"
     results_dir = "logs"
 
 for generator_param in generator_params:
     model = GAN(img_dim, discriminator_params=discriminator_params, fid_interval=interval,
-                generator_params=generator_param, gen_model="basic")
+                generator_params=generator_param, gen_model="unet")
 
     potsdam = PostdamCarsDataModule(
-        data_dir, img_size=img_dim[1:], batch_size=batch_size)
+        data_dir1, img_size=img_dim[1:], batch_size=batch_size, data_dir2=data_dir2)
     potsdam.setup()
 
     callbacks = [

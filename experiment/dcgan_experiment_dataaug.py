@@ -93,7 +93,11 @@ for transform in dataaug:
     # training
     trainer = pl.Trainer(default_root_dir=results_dir, gpus=1, max_epochs=max_epochs,
                          callbacks=callbacks, progress_bar_refresh_rate=20)
-    trainer.fit(model, datamodule=potsdam)
+    try:
+        trainer.fit(model, datamodule=potsdam)
+    except KeyboardInterrupt:
+        pass
 
 file_name = os.path.basename(__file__)
-copyfile(file_name, os.path.join(results_dir, file_name))
+copyfile(os.path.join("experiment", file_name),
+         os.path.join(results_dir, file_name))

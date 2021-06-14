@@ -3,7 +3,8 @@ from shutil import copyfile
 
 from torchsummary import summary
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from torchvision import transforms
 
 from scripts.models import *
 from scripts.utility import *
@@ -53,7 +54,11 @@ for alpha in alphas:
     # training
     trainer = pl.Trainer(default_root_dir=results_dir, gpus=1, max_epochs=max_epochs,
                          callbacks=callbacks, progress_bar_refresh_rate=20)
-    trainer.fit(model, datamodule=potsdam)
+    try:
+        trainer.fit(model, datamodule=potsdam)
+    except KeyboardInterrupt:
+        pass
 
 file_name = os.path.basename(__file__)
-copyfile(file_name, os.path.join(results_dir, file_name))
+copyfile(os.path.join("experiment", file_name),
+         os.path.join(results_dir, file_name))

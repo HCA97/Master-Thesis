@@ -33,6 +33,7 @@ class BasicDiscriminator(nn.Module):
         super().__init__()
 
         self.heat_map = heat_map
+        self.n_layers = n_layers
 
         input_channels, input_height, input_width = img_size
 
@@ -127,7 +128,7 @@ class UnetGenerator(nn.Module):
 
 
 class ResNetGenerator(nn.Module):
-    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=4, learn_upsample=False, act="relu", n_blocks=1, bn_mode="old", ** kwargs):
+    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=4, learn_upsample=False, act="relu", n_blocks=1, bn_mode="old", inject_noise=False, **kwargs):
         super().__init__()
 
         input_channels, input_height, input_width = img_size
@@ -161,9 +162,16 @@ class ResNetGenerator(nn.Module):
             if learn_upsample:
                 layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
                                         self.init_channels // 2 ** (i-1), kernel_size=1, padding=0, act=act, bn_mode=bn_mode))
+
+            if inject_noise:
+                layers.append(NoiseLayer(self.init_channels // 2 ** (i-1)))
+
             layers.append(ResBlock(self.init_channels // 2 ** (i-1),
                                    self.init_channels // 2 ** i, act=act, bn_mode=bn_mode))
+
             for n in range(1, n_blocks):
+                if inject_noise:
+                    layers.append(NoiseLayer(self.init_channels // 2 ** (i-1)))
                 layers.append(ResBlock(self.init_channels // 2 ** i,
                                        self.init_channels // 2 ** i, act=act, bn_mode=bn_mode))
 
@@ -199,7 +207,7 @@ class BasicGenerator(nn.Module):
     UNSUPERVISED REPRESENTATION LEARNING WITH DEEP CONVOLUTIONAL GENERATIVE ADVERSARIAL NETWORKS.
     """
 
-    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=2, act="leakyrelu", learn_upsample=False, inject_noise_conv=False, bn_mode="old", **kwargs):
+    def __init__(self, img_size, latent_dim=100, init_channels=128, n_layers=2, act="leakyrelu", learn_upsample=False, inject_noise=False, bn_mode="old", **kwargs):
         super().__init__()
 
         input_channels, input_height, input_width = img_size
@@ -233,6 +241,9 @@ class BasicGenerator(nn.Module):
                 layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
                                         self.init_channels // 2 ** (i-1),
                                         kernel_size=1, padding=0, act=act, bn_mode=bn_mode))
+            if inject_noise:
+                layers.append(NoiseLayer(self.init_channels // 2 ** (i-1)))
+
             layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
                                     self.init_channels // 2 ** i,
                                     act=act, bn_mode=bn_mode))
