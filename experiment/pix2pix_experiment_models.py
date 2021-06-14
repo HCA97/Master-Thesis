@@ -13,8 +13,8 @@ from scripts.callbacks import *
 
 # POTSDAM CARS
 generator_params = [("unet", {"n_layers": 4, "init_channels": 64, "act": "leakyrelu",
-                    "bn_mode": "default", "n_blocks": 1, "reconstruction": True}),
-                    ("refiner", {"n_layers": 4, "init_channels": 128, "act": "leakyrelu",
+                    "bn_mode": "default", "n_blocks": 2, "reconstruction": True}),
+                    ("refiner", {"n_layers": 4, "init_channels": 256, "act": "leakyrelu",
                                  "bn_mode": "default", "n_layers": 4, "reconstruction": True})]
 discriminator_params = {"base_channels": 32,
                         "n_layers": 4, "bn_mode": "default"}
