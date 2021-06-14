@@ -25,7 +25,7 @@ interval = 25
 
 data_dir1 = "/scratch/s7hialtu/potsdam_cars"
 data_dir2 = "/scratch/s7hialtu/artificial_cars"
-results_dir = "/scratch/s7hialtu/pix2pix_unet"
+results_dir = "/scratch/s7hialtu/pix2pix_unet_beta"
 
 if not os.path.isdir(data_dir1):
     data_dir1 = "../potsdam_data/potsdam_cars"
