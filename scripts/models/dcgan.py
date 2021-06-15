@@ -1,3 +1,4 @@
+import copy
 import pytorch_lightning as pl
 import torch as th
 import torch.nn as nn
@@ -23,7 +24,8 @@ class GAN(pl.LightningModule):
 
     def __init__(self,
                  img_dim=(3, 32, 64),
-                 learning_rate=0.0002,
+                 learning_rate_gen=0.0002,
+                 learning_rate_disc=0.0002,
                  betas=(0.5, 0.999),
                  discriminator_params=None,
                  generator_params=None,
@@ -35,7 +37,8 @@ class GAN(pl.LightningModule):
                  fid_interval=5,
                  use_lr_scheduler=False,
                  gen_init="normal",
-                 disc_init="normal"):
+                 disc_init="normal",
+                 one_sided_label_smoothing=False):
         super().__init__()
         self.save_hyperparameters()
 
@@ -99,14 +102,16 @@ class GAN(pl.LightningModule):
         return discriminator
 
     def configure_optimizers(self):
-        lr = self.hparams.learning_rate
-        betas = self.hparams.betas
 
         # optimizers
         opt_disc = th.optim.Adam(
-            self.discriminator.parameters(), lr=lr, betas=betas)
+            self.discriminator.parameters(),
+            lr=self.hparams.learning_rate_disc,
+            betas=self.hparams.betas)
         opt_gen = th.optim.Adam(
-            self.generator.parameters(), lr=lr, betas=betas)
+            self.generator.parameters(),
+            lr=self.hparams.learning_rate_gen,
+            betas=self.hparams.betas)
 
         # scheduler - patience is 125 epochs
         # pytorch lighting is annoying
@@ -153,6 +158,10 @@ class GAN(pl.LightningModule):
             # Train with real
             real_pred = self.discriminator(real)
             real_gt = th.ones_like(real_pred)
+
+            # Noisy Labels
+            if self.hparams.one_sided_label_smoothing:
+                real_gt = 0.9*real_gt
             real_loss = self.criterion(real_pred, real_gt)
 
             # Gradient Penalty (R1)
@@ -172,6 +181,7 @@ class GAN(pl.LightningModule):
                 fake_ = self.generator(z)
             fake_pred = self.discriminator(fake_)
             fake_gt = th.zeros_like(fake_pred)
+
             fake_loss = self.criterion(fake_pred, fake_gt)
 
             # Total Loss
@@ -200,6 +210,7 @@ class GAN(pl.LightningModule):
             # Gen Loss
             fake_pred = self.discriminator(fake_)
             fake_gt = th.ones_like(fake_pred)
+
             gen_loss = self.criterion(fake_pred, fake_gt)
 
             # Total Loss

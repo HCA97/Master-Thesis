@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch as th
+from torch.nn.utils import spectral_norm
 
 
 class LinearLayer(nn.Module):
@@ -9,15 +10,19 @@ class LinearLayer(nn.Module):
                  use_bn=True,
                  act="leakyrelu",
                  n_blocks=1,
-                 bn_mode="old"):
+                 bn_mode="old",
+                 use_spectral_norm=False):
         super().__init__()
 
         self.linear_blocks = nn.ModuleList()
 
         for i in range(n_blocks):
+            l = nn.Linear(in_f if i == 0 else out_f, out_f,
+                          bias=not use_bn or i == 0)
             self.linear_blocks.append(
-                nn.Linear(in_f if i == 0 else out_f, out_f, bias=not use_bn))
-            if use_bn:
+                spectral_norm(l) if use_spectral_norm else l)
+
+            if use_bn and i != 0:
                 if bn_mode == "old":
                     self.linear_blocks.append(nn.BatchNorm1d(out_f, eps=0.8))
                 elif bn_mode == "momentum":
@@ -55,7 +60,7 @@ class NoiseLayer(nn.Module):
 
     def __init__(self, channels):
         super().__init__()
-        self.weight = nn.Parameter(torch.zeros(channels))
+        self.weight = nn.Parameter(th.zeros(channels))
         self.noise = None
 
     def forward(self, x, noise=None):
@@ -72,14 +77,18 @@ class NoiseLayer(nn.Module):
 
 
 class ResBlock(nn.Module):
-    def __init__(self, in_f, out_f, act="leakyrelu", inject_noise=False, bn_mode="old"):
+    def __init__(self, in_f, out_f, act="leakyrelu", inject_noise=False, bn_mode="old", use_spectral_norm=False):
         super().__init__()
         self.projection = None
         if in_f != out_f:
             self.projection = ConvBlock(
-                in_f, out_f, act=act, inject_noise=inject_noise, bn_mode=bn_mode)
+                in_f, out_f, act=act, inject_noise=inject_noise, bn_mode=bn_mode, use_spectral_norm=use_spectral_norm)
         self.conv_block = nn.Sequential(
-            ConvBlock(out_f, out_f, act=act, inject_noise=inject_noise, bn_mode=bn_mode), ConvBlock(out_f, out_f, act="linear", bn_mode=bn_mode))
+            ConvBlock(out_f, out_f, act=act,
+                      inject_noise=inject_noise, bn_mode=bn_mode),
+            ConvBlock(out_f, out_f, act="linear", bn_mode=bn_mode,
+                      use_spectral_norm=use_spectral_norm)
+        )
         self.act = nn.LeakyReLU(
             0.2, inplace=True) if act == "leakyrelu" else nn.ReLU(inplace=True)
 
@@ -125,7 +134,17 @@ class ConvBlock(nn.Module):
     NotImplementedError
     """
 
-    def __init__(self, in_f, out_f, kernel_size=3, stride=1, dropout=False, use_bn=True, act="leakyrelu", padding=1, n_blocks=1, inject_noise=False, bn_mode="old"):
+    def __init__(self, in_f, out_f,
+                 kernel_size=3,
+                 stride=1,
+                 dropout=False,
+                 use_bn=True,
+                 act="leakyrelu",
+                 padding=1,
+                 n_blocks=1,
+                 inject_noise=False,
+                 bn_mode="old",
+                 use_spectral_norm=False):
         """ConvBlocks Constructor"""
         super(ConvBlock, self).__init__()
 
@@ -134,13 +153,25 @@ class ConvBlock(nn.Module):
 
         self.conv_block = nn.ModuleList()
         for i in range(n_blocks):
-            self.conv_block.append(
-                nn.Conv2d(in_f if i == 0 else out_f, out_f, kernel_size, stride=stride, padding=padding, bias=not use_bn))
+            if use_spectral_norm:
+                self.conv_block.append(
+                    spectral_norm(nn.Conv2d(in_f if i == 0 else out_f, out_f, kernel_size,
+                                            stride=stride, padding=padding, bias=not use_bn))
+                )
+
+            else:
+                self.conv_block.append(nn.Conv2d(in_f if i == 0 else out_f, out_f, kernel_size,
+                                                 stride=stride, padding=padding, bias=not use_bn))
+
+            if inject_noise:
+                self.conv_block.append(NoiseLayer(out_f))
+
             if use_bn:
                 if bn_mode == "old":
                     self.conv_block.append(nn.BatchNorm2d(out_f, eps=0.8))
                 elif bn_mode == "momentum":
-                    self.conv_block.append(nn.BatchNorm2d(out_f, momentum=0.8))
+                    self.conv_block.append(
+                        nn.BatchNorm2d(out_f, momentum=0.8))
                 else:
                     self.conv_block.append(nn.BatchNorm2d(out_f))
 
@@ -160,9 +191,6 @@ class ConvBlock(nn.Module):
 
             if dropout:
                 self.conv_block.append(nn.Dropout2d(0.25))
-
-            if inject_noise:
-                self.conv_block.append(NoiseLayer(out_f))
 
     def forward(self, x):
         for layer in self.conv_block:

@@ -13,9 +13,9 @@ from scripts.callbacks import *
 
 # MODELS
 generator_params = {"n_layers": 4, "init_channels": 512,
-                    "bn_mode": "default", "learn_latent": True}
-discriminator_params = {"base_channels": 32,
-                        "n_layers": 4, "bn_mode": "default"}
+                    "bn_mode": "default", "use_spectral_norm": True}
+discriminator_params = {"base_channels": 32, "n_layers": 4,
+                        "bn_mode": "default", "use_spectral_norm": True}
 
 img_dim = (3, 32, 64)
 batch_size = 64
@@ -32,7 +32,7 @@ transform = transforms.Compose([transforms.Resize(img_dim[1:]),
 
 # POTSDAM CARS
 data_dir = "/scratch/s7hialtu/potsdam_cars"
-results_dir = "/scratch/s7hialtu/dcgan_learn_latent"
+results_dir = "/scratch/s7hialtu/dcgan_spectral_norm"
 
 if not os.path.isdir(data_dir):
     data_dir = "../potsdam_data/potsdam_cars"

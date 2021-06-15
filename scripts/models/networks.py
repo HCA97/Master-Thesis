@@ -29,7 +29,15 @@ class BasicDiscriminator(nn.Module):
     UNSUPERVISED REPRESENTATION LEARNING WITH DEEP CONVOLUTIONAL GENERATIVE ADVERSARIAL NETWORKS.
     """
 
-    def __init__(self, img_size, base_channels=16, n_layers=4, heat_map=False, padding=1, bn_mode="old", use_bn_first_conv=False):
+    def __init__(self,
+                 img_size,
+                 base_channels=16,
+                 n_layers=4,
+                 heat_map=False,
+                 padding=1,
+                 bn_mode="old",
+                 use_spectral_norm=False,
+                 use_bn_first_conv=False):
         super().__init__()
 
         self.heat_map = heat_map
@@ -41,7 +49,7 @@ class BasicDiscriminator(nn.Module):
                             dropout=True, use_bn=use_bn_first_conv, bn_mode=bn_mode)]
         for i in range(1, n_layers):
             layers.append(ConvBlock(base_channels*2**(i-1), base_channels*2**i, stride=2, padding=padding,
-                          dropout=True, bn_mode=bn_mode))
+                          dropout=True, bn_mode=bn_mode, use_spectral_norm=use_spectral_norm))
 
         self.conv_blocks = nn.Sequential(*layers)
         if self.heat_map:
@@ -72,7 +80,14 @@ class BasicDiscriminator(nn.Module):
 
 
 class RefinerNet(nn.Module):
-    def __init__(self, n_channels=3, init_channels=64, n_layers=4, act="relu", bn_mode="old", reconstruct=False, **kwargs):
+    def __init__(self,
+                 n_channels=3,
+                 init_channels=64,
+                 n_layers=4,
+                 act="relu",
+                 bn_mode="old",
+                 reconstruct=False,
+                 **kwargs):
         super().__init__()
 
         self.reconstruct = reconstruct
@@ -267,6 +282,7 @@ class BasicGenerator(nn.Module):
                  bn_mode="old",
                  learn_latent=False,
                  use_bn_latent=True,
+                 use_spectral_norm=False,
                  **kwargs):
         super().__init__()
 
@@ -285,7 +301,9 @@ class BasicGenerator(nn.Module):
 
         if self.learn_latent:
             self.w = LinearLayer(
-                self.latent_dim, self.latent_dim, bn_mode="default", use_bn=use_bn_latent, n_blocks=4)
+                self.latent_dim, self.latent_dim,
+                bn_mode="default", use_bn=use_bn_latent,
+                use_spectral_norm=use_spectral_norm, n_blocks=4)
 
         self.l1 = nn.Linear(self.latent_dim, self.init_channels *
                             self.init_width * self.init_height)
@@ -295,9 +313,9 @@ class BasicGenerator(nn.Module):
                   nn.Upsample(scale_factor=2)]
         if learn_upsample:
             layers.append(ConvBlock(self.init_channels,
-                          self.init_channels, kernel_size=1, act=act, bn_mode=bn_mode))
+                          self.init_channels, use_spectral_norm=use_spectral_norm, kernel_size=1, act=act, bn_mode=bn_mode))
         layers.append(ConvBlock(self.init_channels,
-                      self.init_channels, act=act, bn_mode=bn_mode))
+                      self.init_channels, act=act, bn_mode=bn_mode, inject_noise=inject_noise, use_spectral_norm=use_spectral_norm))
 
         # middle layer
         for i in range(1, n_layers):
@@ -305,13 +323,11 @@ class BasicGenerator(nn.Module):
             if learn_upsample:
                 layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
                                         self.init_channels // 2 ** (i-1),
-                                        kernel_size=1, padding=0, act=act, bn_mode=bn_mode))
-            if inject_noise:
-                layers.append(NoiseLayer(self.init_channels // 2 ** (i-1)))
+                                        kernel_size=1, padding=0, act=act, bn_mode=bn_mode, use_spectral_norm=use_spectral_norm))
 
             layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
                                     self.init_channels // 2 ** i,
-                                    act=act, bn_mode=bn_mode))
+                                    act=act, bn_mode=bn_mode, inject_noise=inject_noise, use_spectral_norm=use_spectral_norm))
 
         # last layer
         layers.append(ConvBlock(self.init_channels // 2**(n_layers-1),
