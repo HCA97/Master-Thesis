@@ -73,11 +73,16 @@ class GAN(pl.LightningModule):
         elif self.hparams.gen_model == "unet":
             generator = UnetGenerator(
                 n_channels=self.hparams.img_dim[0], **generator_params)
+        elif self.hparams.gen_model == "refiner":
+            generator = RefinerNet(
+                n_channels=self.hparams.img_dim[0], **generator_params)
         else:
             raise NotImplementedError()
 
         if self.hparams.gen_init == "normal":
             generator.apply(weights_init_normal)
+        elif self.hparams.gen_init == "default":
+            pass
         return generator
 
     def get_discriminator(self, discriminator_params):

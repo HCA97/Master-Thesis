@@ -20,30 +20,15 @@ def weights_init_normal(m):
         th.nn.init.constant_(m.bias.data, 0.0)
 
 
-# def interpolate(p1: th.Tensor, p2: th.Tensor, steps: int, use_slerp: bool) -> th.Tensor:
-#     """Interpolation of two latent points.
-
-#     References
-#     ----------
-#     https://en.wikipedia.org/wiki/Slerp
-#     https://machinelearningmastery.com/how-to-interpolate-and-perform-vector-arithmetic-with-faces-using-a-generative-adversarial-network/
-#     """
-
-#     if p1.device != p2.device:
-#         raise RuntimeError("p1 and p2 uses different devices.")
-
-#     points = th.zeros((steps + 2, len(p1)), device=p1.device)
-#     ratios = th.linspace(0, 1, steps=steps)
-
-#     points[0] = p1
-#     points[-1] = p2
-
-#     for i, ratio in enumerate(ratios):
-#         points[i+1] = interpolate_(p1, p2, ratio, use_slerp)
-#     return points
-
-
 def interpolate(p1: th.Tensor, p2: th.Tensor, ratio: float, use_slerp: bool) -> th.Tensor:
+    """Interpolation of two latent points.
+
+    References
+    ----------
+    https://en.wikipedia.org/wiki/Slerp
+    https://machinelearningmastery.com/how-to-interpolate-and-perform-vector-arithmetic-with-faces-using-a-generative-adversarial-network/
+    """
+
     # linear interpolation if omega -> 0 than it behaves like linear interpolation
 
     if p1.device != p2.device:
@@ -90,11 +75,6 @@ def vgg16_get_activation_maps(imgs: th.Tensor,
     th.Tensor
         activation maps
     """
-    # vgg16 = torchvision.models.vgg16(pretrained=True).to(
-    #     device) if not use_bn else torchvision.models.vgg16_bn(pretrained=True).to(device)
-    # vgg16.eval()
-    # features = vgg16.features
-
     features = torchvision.models.vgg16(pretrained=True).features.to(
         device) if not use_bn else torchvision.models.vgg16_bn(pretrained=True).features.to(device)
     features.eval()

@@ -77,8 +77,6 @@ class RefinerNet(nn.Module):
 
         self.reconstruct = reconstruct
 
-        self.reconstruct = reconstruct
-
         layers = [ResBlock(n_channels, init_channels,
                            act=act, bn_mode=bn_mode)]
         for _ in range(n_layers-1):
