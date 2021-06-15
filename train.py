@@ -1,4 +1,5 @@
 import os
+from shutil import copyfile
 
 from torchsummary import summary
 import pytorch_lightning as pl
@@ -10,17 +11,28 @@ from scripts.utility import *
 from scripts.dataloader import *
 from scripts.callbacks import *
 
-# POTSDAM CARS
-generator_params = {"n_layers": 4, "init_channels": 512, "act": "leakyrelu"}
-discriminator_params = {"base_channels": 32, "n_layers": 4}
+# MODELS
+generator_params = {"n_layers": 4, "init_channels": 512,
+                    "bn_mode": "default", "learn_latent": True}
+discriminator_params = {"base_channels": 32,
+                        "n_layers": 4, "bn_mode": "default"}
 
 img_dim = (3, 32, 64)
 batch_size = 64
 max_epochs = 1000
 interval = 25
 
+# DATA AUG
+transform = transforms.Compose([transforms.Resize(img_dim[1:]),
+                                transforms.ToTensor(),
+                                transforms.RandomHorizontalFlip(p=0.5),
+                                transforms.RandomVerticalFlip(p=0.5),
+                                transforms.ColorJitter(hue=[-0.1, 0.1]),
+                                transforms.Normalize([0.5], [0.5])])
+
+# POTSDAM CARS
 data_dir = "/scratch/s7hialtu/potsdam_cars"
-results_dir = "/scratch/s7hialtu/dcgan_bn_momentum"
+results_dir = "/scratch/s7hialtu/dcgan_learn_latent"
 
 if not os.path.isdir(data_dir):
     data_dir = "../potsdam_data/potsdam_cars"
@@ -31,7 +43,7 @@ model = GAN(img_dim, discriminator_params=discriminator_params, fid_interval=int
             generator_params=generator_params, gen_model="basic")
 
 potsdam = PostdamCarsDataModule(
-    data_dir, img_size=img_dim[1:], batch_size=batch_size)
+    data_dir, img_size=img_dim[1:], batch_size=batch_size, transform=transform)
 potsdam.setup()
 
 callbacks = [
@@ -40,7 +52,7 @@ callbacks = [
     LatentDimInterpolator(
         interpolate_epoch_interval=interval, num_samples=10),
     ModelCheckpoint(period=interval, save_top_k=-1, filename="{epoch}"),
-    EarlyStopping(monitor="fid", patience=10*interval, mode="min"),
+    EarlyStopping(monitor="fid", patience=20*interval, mode="min"),
     Pix2PixCallback(epoch_interval=interval),
     ShowWeights(),
     MyEarlyStopping(300, threshold=5, monitor="fid", mode="min")
