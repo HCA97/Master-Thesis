@@ -11,7 +11,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     "--train_dir", default="../potsdam_data/potsdam_cars", help="training cars path")
 parser.add_argument(
-    "--test_dir", default="../potsdam_data/potsdam_cars_test", help="test cars path")
+    "--test_dir", default="../potsdam_data/potsdam_cars_val", help="test cars path")
 parser.add_argument("--n_samples", type=int, default=125,
                     help="number of samples")
 parser.add_argument("results_dir", help="where to save")
@@ -57,15 +57,17 @@ fake_cars = next(iter(fake_loader))[0]
 
 # compute confidences for each image
 with th.no_grad():
-    train_cars_pred = model.discriminator(train_cars).detach().cpu().numpy()
-    test_cars_pred = model.discriminator(test_cars).detach().cpu().numpy()
-    fake_cars_pred = model.discriminator(fake_cars).detach().cpu().numpy()
+    train_cars_pred = np.mean(model.discriminator(
+        train_cars).detach().cpu().numpy(), axis=(1, 2, 3) if model.discriminator.heat_map else 1)
+    test_cars_pred = np.mean(model.discriminator(
+        test_cars).detach().cpu().numpy(), axis=(1, 2, 3) if model.discriminator.heat_map else 1)
+    fake_cars_pred = np.mean(model.discriminator(
+        fake_cars).detach().cpu().numpy(), axis=(1, 2, 3) if model.discriminator.heat_map else 1)
 
 # plot box plot for each of them
 plt.boxplot(
-    [train_cars_pred[:, 0], test_cars_pred[:, 0], fake_cars_pred[:, 0]])
+    [train_cars_pred, test_cars_pred, fake_cars_pred])
 plt.xticks([1, 2, 3], ["Train Cars", "Test Cars", "Fake Cars"])
 plt.yticks([i / 10 for i in range(10+1)])
 plt.title("Discriminator's Prediction")
-# plt.ylabel("Discriminator's Prediction")
 plt.savefig(os.path.join(results_dir, "eval_discriminator.png"))
