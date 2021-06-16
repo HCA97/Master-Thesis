@@ -91,10 +91,19 @@ class ShowWeights(Callback):
 
             pl_module.eval()
             with th.no_grad():
-                for name, params in pl_module.generator.named_parameters():
-                    if params.grad is not None:
-                        writer.add_histogram(
-                            "Generator/" + name, params.detach().cpu().numpy(), trainer.current_epoch)
+                if pl_module.hparams.moving_average:
+                    for (name, params), params_avg in zip(pl_module.generator.named_parameters(), pl_module.generator_avg.parameters()):
+                        if params.grad is not None:
+                            writer.add_histogram(
+                                "Generator/" + name, params.detach().cpu().numpy(), trainer.current_epoch)
+                            writer.add_histogram(
+                                "Generator_Avg/" + name, params_avg.detach().cpu().numpy(), trainer.current_epoch)
+                else:
+                    for name, params in pl_module.generator.named_parameters():
+                        if params.grad is not None:
+                            writer.add_histogram(
+                                "Generator/" + name, params.detach().cpu().numpy(), trainer.current_epoch)
+
                 for name, params in pl_module.discriminator.named_parameters():
                     if params.grad is not None:
                         writer.add_histogram(

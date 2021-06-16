@@ -278,6 +278,7 @@ class BasicGenerator(nn.Module):
                  n_layers=2,
                  act="leakyrelu",
                  learn_upsample=False,
+                 use_1x1_conv=True,
                  inject_noise=False,
                  bn_mode="old",
                  learn_latent=False,
@@ -302,7 +303,7 @@ class BasicGenerator(nn.Module):
         if self.learn_latent:
             self.w = LinearLayer(
                 self.latent_dim, self.latent_dim,
-                bn_mode="default", use_bn=use_bn_latent,
+                bn_mode=bn_mode, use_bn=use_bn_latent,
                 use_spectral_norm=use_spectral_norm, n_blocks=4)
 
         self.l1 = nn.Linear(self.latent_dim, self.init_channels *
@@ -313,9 +314,17 @@ class BasicGenerator(nn.Module):
                   nn.Upsample(scale_factor=2)]
         if learn_upsample:
             layers.append(ConvBlock(self.init_channels,
-                          self.init_channels, use_spectral_norm=use_spectral_norm, kernel_size=1, act=act, bn_mode=bn_mode))
+                                    self.init_channels,
+                                    use_spectral_norm=use_spectral_norm,
+                                    kernel_size=1 if use_1x1_conv else 3,
+                                    act=act,
+                                    bn_mode=bn_mode))
         layers.append(ConvBlock(self.init_channels,
-                      self.init_channels, act=act, bn_mode=bn_mode, inject_noise=inject_noise, use_spectral_norm=use_spectral_norm))
+                                self.init_channels,
+                                act=act,
+                                bn_mode=bn_mode,
+                                inject_noise=inject_noise,
+                                use_spectral_norm=use_spectral_norm))
 
         # middle layer
         for i in range(1, n_layers):
@@ -323,15 +332,24 @@ class BasicGenerator(nn.Module):
             if learn_upsample:
                 layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
                                         self.init_channels // 2 ** (i-1),
-                                        kernel_size=1, padding=0, act=act, bn_mode=bn_mode, use_spectral_norm=use_spectral_norm))
+                                        kernel_size=1 if use_1x1_conv else 3,
+                                        act=act,
+                                        bn_mode=bn_mode,
+                                        use_spectral_norm=use_spectral_norm))
 
             layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
                                     self.init_channels // 2 ** i,
-                                    act=act, bn_mode=bn_mode, inject_noise=inject_noise, use_spectral_norm=use_spectral_norm))
+                                    act=act, bn_mode=bn_mode,
+                                    inject_noise=inject_noise,
+                                    use_spectral_norm=use_spectral_norm))
 
         # last layer
         layers.append(ConvBlock(self.init_channels // 2**(n_layers-1),
-                      input_channels, use_bn=False, act="tanh", bn_mode=bn_mode))
+                                input_channels,
+                                use_bn=False,
+                                use_spectral_norm=False,
+                                act="tanh",
+                                bn_mode=bn_mode))
 
         self.conv_blocks = nn.Sequential(*layers)
 

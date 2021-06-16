@@ -3,6 +3,8 @@ import pytorch_lightning as pl
 import torch as th
 import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+import lpips
+import numpy as np
 
 from ..layers import *
 from ..utility import *
@@ -30,6 +32,7 @@ class GAN(pl.LightningModule):
                  discriminator_params=None,
                  generator_params=None,
                  use_gp=False,
+                 use_lpips=False,
                  alpha=1.0,
                  beta=1.0,
                  gen_model="basic",
@@ -38,7 +41,10 @@ class GAN(pl.LightningModule):
                  use_lr_scheduler=False,
                  gen_init="normal",
                  disc_init="normal",
-                 one_sided_label_smoothing=False):
+                 one_sided_label_smoothing=False,
+                 moving_average=False,
+                 use_buffer=False,
+                 buffer_method="random"):
         super().__init__()
         self.save_hyperparameters()
 
@@ -46,8 +52,16 @@ class GAN(pl.LightningModule):
         self.discriminator = self.get_discriminator(discriminator_params)
         self.criterion = self.get_criterion()
 
-        # TODO WEIGHT AVERAGIN FOR GEN
-        # TODO BUFFER FOR DISC
+        if moving_average:
+            self.generator_avg = self.get_generator(generator_params)
+            self.generator_avg.load_state_dict(
+                copy.deepcopy(self.generator.state_dict()))
+
+        if use_lpips:
+            self.lpips = lpips.LPIPS(net='vgg')
+
+        if use_buffer:
+            self.buffer = [None for i in range(1000)]
 
         # ingerating FID score
         self.n_samples = 1024
@@ -55,6 +69,9 @@ class GAN(pl.LightningModule):
         self.act_samples = 512
         self.gen_input = []
         self.imgs_real = None
+
+        # LR Scheduler
+        # self.scheduler_disc, self.scheduler_gen = None, None
 
     def lr_schedulers(self):
         # over-write this shit
@@ -72,7 +89,6 @@ class GAN(pl.LightningModule):
         elif self.hparams.gen_model == "basic":
             generator = BasicGenerator(
                 self.hparams.img_dim, **generator_params)
-
         elif self.hparams.gen_model == "unet":
             generator = UnetGenerator(
                 n_channels=self.hparams.img_dim[0], **generator_params)
@@ -123,12 +139,19 @@ class GAN(pl.LightningModule):
         return [opt_disc, opt_gen], []
 
     def forward(self, tensor: th.Tensor) -> th.Tensor:
+        if self.hparams.moving_average:
+            return self.generator_avg(tensor)
         return self.generator(tensor)
 
     def training_step(self, batch, batch_idx, optimizer_idx):
         real, fake = batch
 
-        # append real image act and fake image
+        # moving average
+        if self.hparams.moving_average:
+            for p, avg_p in zip(self.generator.parameters(), self.generator_avg.parameters()):
+                avg_p.data.copy_(0.999*avg_p.data + 0.001*p.data)
+
+        # append real image activation
         if len(self.act_real) < self.n_samples:
             act = np.squeeze(vgg16_get_activation_maps(
                 real, layer_idx=33, device="cpu", normalize_range=(-1, 1)).numpy())
@@ -179,7 +202,48 @@ class GAN(pl.LightningModule):
                 z = th.normal(0, 1, size=(
                     len(real), self.generator.latent_dim), device=self.device)
                 fake_ = self.generator(z)
+
+            if self.hparams.use_buffer:
+                # copy the batch so we can copy it to buffer
+                fake_copy = fake_.detach().cpu().clone()
+
+                # skip buffer until it is full
+                try:
+                    self.buffer.index(None)
+                except ValueError:
+                    pick = len(fake_) // 2
+                    idx = np.random.choice(
+                        len(self.buffer), pick, replace=False)
+
+                    for i in range(pick):
+                        fake_[i] = self.buffer[idx[i]].to(self.device)
+
             fake_pred = self.discriminator(fake_)
+
+            if self.hparams.use_buffer:
+                # remember up to 100 iterations
+                cases = len(self.buffer) // 100
+
+                # slice in the buffer, not the best but it works
+                # store 10 cases from each batch
+                si = cases * (self.global_step % 100)
+                ei = min(si + cases, len(self.buffer))
+
+                # copy predictions, i dont know this much copying is needed
+                fake_pred_copy = fake_pred.detach().cpu().clone()
+                fake_pred_copy = fake_pred_copy.mean(axis=1) if len(
+                    fake_pred_copy.shape) == 2 else fake_pred_copy.mean(axis=(1, 2, 3))
+                idx = th.argsort(fake_pred_copy)
+
+                # store the buffer
+                pick = ei - si
+                if self.hparams.buffer_method == "best":
+                    self.buffer[si:ei] = fake_copy[idx[-pick:]]
+                elif self.hparams.buffer_method == "worst":
+                    self.buffer[si:ei] = fake_copy[idx[:pick]]
+                else:
+                    self.buffer[si:ei] = fake_copy[:pick]
+
             fake_gt = th.zeros_like(fake_pred)
 
             fake_loss = self.criterion(fake_pred, fake_gt)
@@ -201,7 +265,13 @@ class GAN(pl.LightningModule):
                 fake_ = self.generator(fake)
 
                 # L1-Norm
-                l1_loss = self.hparams.beta * th.sum(th.abs(fake - fake_))
+                if not self.hparams.use_lpips:
+                    l1_loss = self.hparams.beta * th.sum(th.abs(fake - fake_))
+                else:
+                    # this might use a lot of vram
+                    self.lpips.to(self.device)
+                    l1_loss = self.hparams.beta * \
+                        th.sum(self.lpips(fake, fake_, normalize=True))
             else:
                 z = th.normal(0, 1, size=(
                     len(real), self.generator.latent_dim), device=self.device)
