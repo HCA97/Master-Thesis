@@ -26,25 +26,30 @@ class GAN(pl.LightningModule):
 
     def __init__(self,
                  img_dim=(3, 32, 64),
+                 fid_interval=5,
+                 # For optimizer
+                 use_lr_scheduler=False,
                  learning_rate_gen=0.0002,
                  learning_rate_disc=0.0002,
                  betas=(0.5, 0.999),
+                 # Model Parameters
                  discriminator_params=None,
                  generator_params=None,
-                 use_gp=False,
-                 use_lpips=False,
-                 alpha=1.0,
-                 beta=1.0,
                  gen_model="basic",
                  disc_model="basic",
-                 fid_interval=5,
-                 use_lr_scheduler=False,
                  gen_init="normal",
                  disc_init="normal",
+                 # For pix2pix reconstruction loss
+                 use_lpips=False,
+                 beta=1.0,
+                 # Training Strategies
+                 use_gp=False,
+                 alpha=1.0,
                  one_sided_label_smoothing=False,
                  moving_average=False,
                  use_buffer=False,
-                 buffer_method="random"):
+                 buffer_method="random",
+                 buffer_size=1000):
         super().__init__()
         self.save_hyperparameters()
 
@@ -61,7 +66,10 @@ class GAN(pl.LightningModule):
             self.lpips = lpips.LPIPS(net='vgg')
 
         if use_buffer:
-            self.buffer = [None for i in range(1000)]
+            if buffer_size % 100 != 0:
+                raise AttributeError(
+                    "Length of the buffer must be divisible by 100.")
+            self.buffer = [None for i in range(buffer_size)]
 
         # ingerating FID score
         self.n_samples = 1024
@@ -100,8 +108,6 @@ class GAN(pl.LightningModule):
 
         if self.hparams.gen_init == "normal":
             generator.apply(weights_init_normal)
-        elif self.hparams.gen_init == "default":
-            pass
         return generator
 
     def get_discriminator(self, discriminator_params):
@@ -147,18 +153,18 @@ class GAN(pl.LightningModule):
         real, fake = batch
 
         # moving average
-        if self.hparams.moving_average:
+        if self.hparams.moving_average and optimizer_idx == 1:
             for p, avg_p in zip(self.generator.parameters(), self.generator_avg.parameters()):
                 avg_p.data.copy_(0.999*avg_p.data + 0.001*p.data)
 
-        # append real image activation
+        # append real image activation for FID
         if len(self.act_real) < self.n_samples:
             act = np.squeeze(vgg16_get_activation_maps(
                 real, layer_idx=33, device="cpu", normalize_range=(-1, 1)).numpy())
             self.act_real = np.concatenate(
                 (self.act_real, act), axis=0) if len(self.act_real) > 0 else act
 
-        # append fake images or noise vectors
+        # append fake images or noise vectors for FID
         if len(self.gen_input) < self.n_samples:
             if self.hparams.gen_model in ["unet", "refiner"]:
                 self.gen_input = th.cat((self.gen_input, fake), dim=0) if len(
@@ -203,8 +209,9 @@ class GAN(pl.LightningModule):
                     len(real), self.generator.latent_dim), device=self.device)
                 fake_ = self.generator(z)
 
+            # Buffer
             if self.hparams.use_buffer:
-                # copy the batch so we can copy it to buffer
+                # copy the batch so we can copy it to buffer later
                 fake_copy = fake_.detach().cpu().clone()
 
                 # skip buffer until it is full
@@ -224,19 +231,22 @@ class GAN(pl.LightningModule):
                 # remember up to 100 iterations
                 cases = len(self.buffer) // 100
 
-                # slice in the buffer, not the best but it works
-                # store 10 cases from each batch
-                si = cases * (self.global_step % 100)
-                ei = min(si + cases, len(self.buffer))
+                if len(fake_copy) < cases:
+                    raise RuntimeError(
+                        f"If you are using ``use_buffer`` the batch size must be larger than {cases}. Either decrease the size of your buffer or increase your batch size.")
 
-                # copy predictions, i dont know this much copying is needed
+                # slice in the buffer, not the best but it works
+                si = cases * (self.global_step % 100)
+                ei = min(si + cases, len(self.buffer))  # incase it overshoots
+
+                # copy predictions, i don't know this much copying is needed
                 fake_pred_copy = fake_pred.detach().cpu().clone()
                 fake_pred_copy = fake_pred_copy.mean(axis=1) if len(
                     fake_pred_copy.shape) == 2 else fake_pred_copy.mean(axis=(1, 2, 3))
-                idx = th.argsort(fake_pred_copy)
+                idx = th.argsort(fake_pred_copy)  # ascending order
 
                 # store the buffer
-                pick = ei - si
+                pick = ei - si  # incase it overshoots
                 if self.hparams.buffer_method == "best":
                     self.buffer[si:ei] = fake_copy[idx[-pick:]]
                 elif self.hparams.buffer_method == "worst":

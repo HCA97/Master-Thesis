@@ -58,12 +58,23 @@ class NoiseLayer(nn.Module):
     https://github.com/huangzh13/StyleGAN.pytorch/blob/bce838ecfa34d4de69429af4f7e028b63e52c3fe/models/CustomLayers.py#L183
     """
 
-    def __init__(self, channels):
+    def __init__(self, channels, deterministic=False):
         super().__init__()
         self.weight = nn.Parameter(th.zeros(channels))
         self.noise = None
+        # self.deterministic = deterministic
 
     def forward(self, x, noise=None):
+        # if self.deterministic and self.noise is None:
+        #     self.noise = th.randn(x.size(0), 1, x.size(
+        #         2), x.size(3), device=x.device, dtype=x.dtype)
+
+        # if self.deterministic:
+        #     noise = self.noise
+        # else:
+        #     noise = th.randn(x.size(0), 1, x.size(
+        #         2), x.size(3), device=x.device, dtype=x.dtype)
+
         if noise is None and self.noise is None:
             noise = th.randn(x.size(0), 1, x.size(
                 2), x.size(3), device=x.device, dtype=x.dtype)
@@ -102,7 +113,7 @@ class ResBlock(nn.Module):
 class ConvBlock(nn.Module):
     """Simple convolution block.
 
-    [conv -> bn (if use_bn) -> act -> dropout (if dropout)] x n_blocks
+    [conv -> sn (if use_spectral_norm) -> inject noise (if inject_noise) -> bn (if use_bn) -> act -> dropout (if dropout)] x n_blocks
 
     Parameters
     ----------

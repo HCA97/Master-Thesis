@@ -4,6 +4,41 @@ import torch.nn as nn
 import torch.nn.functional as F
 from ..layers import *
 
+#
+#
+# ------------------------------------------------------- #
+
+
+class EncoderLatent(nn.Module):
+    def __init__(self, generator):
+        super().__init__()
+
+        self.generator = generator
+        for param in self.generator.parameters():
+            param.requires_grad = False
+
+        self.conv_blocks = nn.Sequential(
+            ConvBlock(3, 32, bn_mode="default", use_bn=True),
+            nn.MaxPool2d(2, 2),
+            ConvBlock(32, 64, bn_mode="default", use_bn=True),
+            nn.MaxPool2d(2, 2),
+            ConvBlock(64, 128, bn_mode="default", use_bn=True),
+            nn.MaxPool2d(2, 2),
+            ConvBlock(128, 256, bn_mode="default", use_bn=True),
+            #ConvBlock(256, 256, bn_mode="default", use_bn=True),
+            nn.MaxPool2d(2, 2)
+        )
+
+        self.l1 = nn.Linear(2*4*256, 100)
+
+    def forward(self, img):
+        img = self.conv_blocks(img)
+        img = img.view(img.shape[0], -1)
+        z = self.l1(img)
+        img_rec = self.generator(z)
+        return z, img_rec
+
+
 # -------------------------------------------------------- #
 #                   Discriminators                         #
 # -------------------------------------------------------- #
@@ -82,21 +117,26 @@ class BasicDiscriminator(nn.Module):
 class RefinerNet(nn.Module):
     def __init__(self,
                  n_channels=3,
-                 init_channels=64,
+                 init_channels=128,
                  n_layers=4,
                  act="relu",
                  bn_mode="old",
                  reconstruct=False,
+                 use_spectral_norm=False,
+                 inject_noise=False,
                  **kwargs):
         super().__init__()
 
         self.reconstruct = reconstruct
 
         layers = [ResBlock(n_channels, init_channels,
-                           act=act, bn_mode=bn_mode)]
+                           act=act, bn_mode=bn_mode, use_spectral_norm=use_spectral_norm)]
         for _ in range(n_layers-1):
+            if inject_noise:
+                layers.append(NoiseLayer(init_channels))
+
             layers.append(
-                ResBlock(init_channels, init_channels, act=act, bn_mode=bn_mode))
+                ResBlock(init_channels, init_channels, act=act, bn_mode=bn_mode, use_spectral_norm=use_spectral_norm))
 
         self.conv_blocks = nn.Sequential(*layers)
         self.final = ConvBlock(
@@ -114,7 +154,17 @@ class RefinerNet(nn.Module):
 
 class UnetGenerator(nn.Module):
 
-    def __init__(self, n_channels=3, init_channels=64, n_layers=4, n_blocks=2, act="relu", bn_mode="old", reconstruct=False, **kwargs):
+    def __init__(self,
+                 n_channels=3,
+                 init_channels=64,
+                 n_layers=4,
+                 n_blocks=2,
+                 act="relu",
+                 bn_mode="old",
+                 reconstruct=False,
+                 use_spectral_norm=False,
+                 inject_noise=False,
+                 **kwargs):
         super().__init__()
 
         if n_layers < 2:
@@ -125,23 +175,32 @@ class UnetGenerator(nn.Module):
         # down part
         self.down = nn.ModuleList()
         self.down.append(
-            ConvBlock(n_channels, init_channels, n_blocks=n_blocks, bn_mode=bn_mode))
+            ConvBlock(n_channels, init_channels,
+                      n_blocks=n_blocks, bn_mode=bn_mode, act=act,
+                      use_spectral_norm=use_spectral_norm))
         for i in range(1, n_layers-1):
             self.down.append(
-                ConvBlock(2**(i-1) * init_channels, 2**i * init_channels, n_blocks=n_blocks, act=act, bn_mode=bn_mode))
+                ConvBlock(2**(i-1) * init_channels, 2**i * init_channels,
+                          n_blocks=n_blocks, act=act, bn_mode=bn_mode,
+                          use_spectral_norm=use_spectral_norm))
 
         # bottleneck
         self.bottle_neck = ConvBlock(
-            2**(n_layers-2) * init_channels, 2**(n_layers-1) * init_channels, n_blocks=n_blocks, act=act, bn_mode=bn_mode)
+            2**(n_layers-2) * init_channels, 2**(n_layers-1) * init_channels,
+            n_blocks=n_blocks, act=act, bn_mode=bn_mode,
+            use_spectral_norm=use_spectral_norm, inject_noise=inject_noise)
 
         # up part
         self.up = nn.ModuleList()
         for i in range(n_layers-1, 0, -1):
             block = nn.Sequential(
                 ConvBlock((2**(i - 1) + 2**i)*init_channels,
-                          2**(i-1) * init_channels, kernel_size=1, padding=0, act=act, bn_mode=bn_mode),
+                          2**(i-1) * init_channels, kernel_size=1, act=act,
+                          bn_mode=bn_mode, use_spectral_norm=use_spectral_norm,
+                          inject_noise=inject_noise),
                 ConvBlock(2**(i-1) * init_channels, 2**(i-1)
-                          * init_channels, n_blocks=n_blocks, act=act, bn_mode=bn_mode)
+                          * init_channels, n_blocks=n_blocks,
+                          act=act, bn_mode=bn_mode, use_spectral_norm=use_spectral_norm)
             )
             self.up.append(block)
 
@@ -185,6 +244,8 @@ class ResNetGenerator(nn.Module):
                  inject_noise=False,
                  learn_latent=False,
                  use_bn_latent=True,
+                 use_spectral_norm=False,
+                 use_1x1_conv=True,
                  **kwargs):
         super().__init__()
 
@@ -203,7 +264,7 @@ class ResNetGenerator(nn.Module):
 
         if self.learn_latent:
             self.w = LinearLayer(
-                self.latent_dim, self.latent_dim, use_bn=use_bn_latent, bn_mode=bn_mode, n_blocks=4)
+                self.latent_dim, self.latent_dim, use_bn=use_bn_latent, bn_mode=bn_mode, n_blocks=4, use_spectral_norm=use_spectral_norm)
 
         self.l1 = nn.Linear(self.latent_dim, self.init_channels *
                             self.init_width * self.init_height)
@@ -212,30 +273,38 @@ class ResNetGenerator(nn.Module):
         layers = [nn.BatchNorm2d(self.init_channels),
                   nn.Upsample(scale_factor=2)]
         if learn_upsample:
-            layers.append(ConvBlock(self.init_channels,
-                          self.init_channels, kernel_size=1, padding=0, act=act, bn_mode=bn_mode))
+            layers.append(ConvBlock(self.init_channels, self.init_channels,
+                                    kernel_size=1 if use_1x1_conv else 3,
+                                    padding=0, act=act, bn_mode=bn_mode,
+                                    use_spectral_norm=use_spectral_norm))
         for n in range(n_blocks):
-            layers.append(ResBlock(self.init_channels,
-                          self.init_channels, act=act, bn_mode=bn_mode))
+            layers.append(ResBlock(self.init_channels, self.init_channels,
+                                   act=act, bn_mode=bn_mode, use_spectral_norm=use_spectral_norm))
 
         # middle layer
         for i in range(1, n_layers):
             layers.append(nn.Upsample(scale_factor=2))
             if learn_upsample:
                 layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
-                                        self.init_channels // 2 ** (i-1), kernel_size=1, padding=0, act=act, bn_mode=bn_mode))
+                                        self.init_channels // 2 ** (i-1),
+                                        kernel_size=1 if use_1x1_conv else 3,
+                                        padding=0, act=act, bn_mode=bn_mode,
+                                        use_spectral_norm=use_spectral_norm))
 
             if inject_noise:
                 layers.append(NoiseLayer(self.init_channels // 2 ** (i-1)))
 
             layers.append(ResBlock(self.init_channels // 2 ** (i-1),
-                                   self.init_channels // 2 ** i, act=act, bn_mode=bn_mode))
+                                   self.init_channels // 2 ** i,
+                                   act=act, bn_mode=bn_mode, use_spectral_norm=use_spectral_norm))
 
             for n in range(1, n_blocks):
                 if inject_noise:
                     layers.append(NoiseLayer(self.init_channels // 2 ** (i-1)))
                 layers.append(ResBlock(self.init_channels // 2 ** i,
-                                       self.init_channels // 2 ** i, act=act, bn_mode=bn_mode))
+                                       self.init_channels // 2 ** i,
+                                       act=act, bn_mode=bn_mode,
+                                       use_spectral_norm=use_spectral_norm))
 
         # last layer
         layers.append(ConvBlock(self.init_channels // 2**(n_layers - 1),
