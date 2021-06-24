@@ -20,12 +20,17 @@ class MyEarlyStopping(Callback):
         self.threshold = threshold
         self.epoch = epoch
         self.monitor = monitor
+        self.best_value = None
         self.mode = np.less if mode == "min" else np.greater
 
     def on_epoch_end(self, trainer, pl_module):
         monitor_val = trainer.callback_metrics.get(self.monitor)
         if monitor_val:
-            if (trainer.current_epoch + 1) >= self.epoch and self.mode(self.threshold, monitor_val.item()):
+            if self.best_value is None:
+                self.best_value = monitor_val.item()
+            elif self.mode(monitor_val.item(), self.best_value):
+                self.best_value = monitor_val.item()
+            if (trainer.current_epoch + 1) >= self.epoch and self.mode(self.threshold, self.best_value):
                 raise KeyboardInterrupt("Interrupted by my early stopping")
 
 
