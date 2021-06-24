@@ -106,6 +106,7 @@ def crop_car(img, coord, buffer=5):
     x_min, x_max, y_min, y_max = get_bbox(coord_rot, buffer, image.shape)
     chunk = image[y_min:y_max, x_min:x_max, :].copy()
 
+    # there is a memory leak
     del image
 
     # return subimage
@@ -124,6 +125,7 @@ def save_cars(cars, cars_path):
             continue
         car_path = os.path.join(cars_path, "car_%d.png" % i)
         cv2.imwrite(car_path, car)
+        # cv2.imwrite(car_path, cv2.cvtColor(car, cv2.COLOR_RGB2BGR))
 
 
 def return_artificial_cars(json_file, buffer=5):
