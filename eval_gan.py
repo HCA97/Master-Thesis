@@ -172,7 +172,7 @@ if __name__ == "__main__":
         if not args.skip_val:
             plt.figure()
             plt.plot(checkpoints[:len(fid_train)],
-                     fid_train, marker="*", label="Train")
+                     fid_train, marker="*", label="Training")
             plt.plot(checkpoints[:len(fid_val)], fid_val,
                      marker="*", label="Validation")
             plt.xlabel("Epochs", fontsize=18)

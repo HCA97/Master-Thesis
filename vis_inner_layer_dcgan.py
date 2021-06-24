@@ -51,8 +51,9 @@ def plot_discriminator_steps(img, pl_module, save_dir):
 
     if pl_module.discriminator.heat_map:
         plt.figure(figsize=(12, 8))
-        plt.title(f"Discriminator Final Layer {i+1}", fontsize=20)
-        plt.imshow(np.squeeze(pred), vmax=1, vmin=0, cmap="gray")
+        plt.title(f"Discriminator Final", fontsize=20)
+        colorbar = plt.imshow(np.squeeze(pred), cmap="gray")
+        plt.colorbar(colorbar)
         plt.tight_layout()
         plt.axis("off")
         plt.savefig(os.path.join(save_dir, f"disc_final_layer.png"))
@@ -141,7 +142,7 @@ if __name__ == "__main__":
 
     # noise
     for i in range(1, n_samples+1):
-        z = th.normal(0, 1, (1, model.hparams.latent_dim),
+        z = th.normal(0, 1, (1, model.generator.latent_dim),
                       device=model.device)
 
         # fake imgs
