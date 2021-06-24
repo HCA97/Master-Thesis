@@ -101,7 +101,7 @@ def vgg16_get_activation_maps(imgs: th.Tensor,
 
 
 @th.no_grad()
-def perceptual_path_length(generator, n_samples=1024, epsilon=1e-4, use_slerp=True, device="cpu", truncation=1):
+def perceptual_path_length(generator, n_samples=1024, epsilon=1e-4, use_slerp=True, device="cpu", truncation=1, batch_size=1024):
     """[summary]
 
     Parameters
@@ -116,12 +116,14 @@ def perceptual_path_length(generator, n_samples=1024, epsilon=1e-4, use_slerp=Tr
         [description], by default True
     device : str, optional
         [description], by default "cpu"
+    batch_size : int, optional
 
     Returns
     -------
     [type]
         [description]
     """
+
     # def slerp(a, b, t):
     #     a = a / a.norm(dim=-1, keepdim=True)
     #     b = b / b.norm(dim=-1, keepdim=True)
@@ -132,33 +134,41 @@ def perceptual_path_length(generator, n_samples=1024, epsilon=1e-4, use_slerp=Tr
     #     d = a * th.cos(p) + c * th.sin(p)
     #     d = d / d.norm(dim=-1, keepdim=True)
     #     return d
-    z1 = th.zeros(size=(n_samples, generator.latent_dim),
-                  device=device)
-    z2 = th.zeros(size=(n_samples, generator.latent_dim),
-                  device=device)
 
-    # point between z1 and z2
-    for i in range(n_samples):
-        z1_ = th.normal(0, truncation, size=(generator.latent_dim,),
-                        device=device)
-        z2_ = th.normal(0, truncation, size=(generator.latent_dim,),
-                        device=device)
+    if n_samples % batch_size != 0:
+        raise AttributeError(
+            f"Number of samples ({n_samples}) must be divisible by batch size ({batch_size})")
 
-        ratio = np.random.uniform(0, 1)
-        z1[i, :] = interpolate(z1_, z2_, ratio=ratio, use_slerp=use_slerp)
-        z2[i, :] = interpolate(z1_, z2_, ratio=min(
-            ratio + epsilon, 1), use_slerp=use_slerp)
+    loss_fn_vgg = lpips.LPIPS(net='vgg').to(device)
+    ppl_score = 0
 
-    # create images
-    imgs1 = generator(z1)
-    imgs2 = generator(z2)
+    for _ in range(n_samples // batch_size):
+        z1 = th.zeros(size=(batch_size, generator.latent_dim),
+                      device=device)
+        z2 = th.zeros(size=(batch_size, generator.latent_dim),
+                      device=device)
+        # point between z1 and z2
+        for i in range(batch_size):
+            z1_ = th.normal(0, truncation, size=(generator.latent_dim,),
+                            device=device)
+            z2_ = th.normal(0, truncation, size=(generator.latent_dim,),
+                            device=device)
 
-    # compute lpips
-    loss_fn_vgg = lpips.LPIPS(net='vgg')
-    d = loss_fn_vgg(imgs1, imgs2, normalize=True)
+            ratio = np.random.uniform(0, 1)
+            z1[i, :] = interpolate(z1_, z2_, ratio=ratio, use_slerp=use_slerp)
+            z2[i, :] = interpolate(z1_, z2_, ratio=min(
+                ratio + epsilon, 1), use_slerp=use_slerp)
+
+        # create images
+        imgs1 = generator(z1)
+        imgs2 = generator(z2)
+
+        # compute lpips
+        ppl_score += th.sum(loss_fn_vgg(imgs1, imgs2,
+                            normalize=True)).item() / n_samples
 
     # return mean lpips
-    return th.mean(d).item() / epsilon**2
+    return ppl_score / epsilon**2
 
 
 def fid_score(imgs1: th.Tensor,

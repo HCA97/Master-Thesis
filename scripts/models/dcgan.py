@@ -40,7 +40,7 @@ class GAN(pl.LightningModule):
                  gen_init="normal",
                  disc_init="normal",
                  # For pix2pix reconstruction loss
-                 use_lpips=False,
+                 rec_loss="l1",
                  beta=1.0,
                  # Training Strategies
                  use_gp=False,
@@ -62,8 +62,8 @@ class GAN(pl.LightningModule):
             self.generator_avg.load_state_dict(
                 copy.deepcopy(self.generator.state_dict()))
 
-        if use_lpips:
-            self.lpips = lpips.LPIPS(net='vgg')
+        # if rec_loss == "lpips":
+        #     self.lpips = lpips.LPIPS(net='vgg')
 
         if use_buffer:
             if buffer_size % 100 != 0:
@@ -275,13 +275,17 @@ class GAN(pl.LightningModule):
                 fake_ = self.generator(fake)
 
                 # L1-Norm
-                if not self.hparams.use_lpips:
+                if self.hparams.rec_loss == "l1":
                     l1_loss = self.hparams.beta * th.sum(th.abs(fake - fake_))
-                else:
-                    # this might use a lot of vram
-                    self.lpips.to(self.device)
+                elif self.hparams.rec_loss == "l1_channel_avg":
                     l1_loss = self.hparams.beta * \
-                        th.sum(self.lpips(fake, fake_, normalize=True))
+                        th.sum(th.abs(fake.mean(axis=(1)) -
+                               fake_.mean(axis=(1))))
+                # else:
+                #     # this might use a lot of vram
+                #     self.lpips.to(self.device)
+                #     l1_loss = self.hparams.beta * \
+                #         th.sum(self.lpips(fake, fake_, normalize=True))
             else:
                 z = th.normal(0, 1, size=(
                     len(real), self.generator.latent_dim), device=self.device)

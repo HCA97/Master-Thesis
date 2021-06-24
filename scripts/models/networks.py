@@ -308,7 +308,8 @@ class ResNetGenerator(nn.Module):
 
         # last layer
         layers.append(ConvBlock(self.init_channels // 2**(n_layers - 1),
-                      input_channels, use_bn=False, act="tanh", bn_mode=bn_mode))
+                                input_channels, use_bn=False, use_spectral_norm=False,
+                                act="tanh", bn_mode=bn_mode))
 
         self.conv_blocks = nn.Sequential(*layers)
 
