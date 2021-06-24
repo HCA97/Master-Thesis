@@ -13,9 +13,9 @@ from scripts.callbacks import *
 
 # MODELS
 generator_params = {"n_layers": 4, "init_channels": 512,
-                    "bn_mode": "default", "use_spectral_norm": True}
+                    "bn_mode": "default", "use_spectral_norm": False}
 discriminator_params = {"base_channels": 32, "n_layers": 4,
-                        "bn_mode": "default", "use_spectral_norm": True}
+                        "bn_mode": "default", "use_spectral_norm": False}
 
 img_dim = (3, 32, 64)
 batch_size = 64
@@ -31,16 +31,16 @@ transform = transforms.Compose([transforms.Resize(img_dim[1:]),
                                 transforms.Normalize([0.5], [0.5])])
 
 # POTSDAM CARS
-data_dir = "/scratch/s7hialtu/potsdam_cars"
-results_dir = "/scratch/s7hialtu/dcgan_spectral_norm"
+data_dir = "/scratch/s7hialtu/potsdam_cars_resample"
+results_dir = "/scratch/s7hialtu/dcgan_resample_cars"
 
 if not os.path.isdir(data_dir):
-    data_dir = "../potsdam_data/potsdam_cars"
+    data_dir = "../potsdam_data/potsdam_cars_resample"
     results_dir = "logs"
 
 
-model = GAN(img_dim, discriminator_params=discriminator_params, fid_interval=interval,
-            generator_params=generator_params, gen_model="basic")
+model = GAN(img_dim, discriminator_params=discriminator_params, fid_interval=interval, buffer_method="worst",
+            generator_params=generator_params, gen_model="basic", moving_average=False, use_buffer=False)
 
 potsdam = PostdamCarsDataModule(
     data_dir, img_size=img_dim[1:], batch_size=batch_size, transform=transform)
@@ -52,7 +52,7 @@ callbacks = [
     LatentDimInterpolator(
         interpolate_epoch_interval=interval, num_samples=10),
     ModelCheckpoint(period=interval, save_top_k=-1, filename="{epoch}"),
-    EarlyStopping(monitor="fid", patience=20*interval, mode="min"),
+    EarlyStopping(monitor="fid", patience=10*interval, mode="min"),
     Pix2PixCallback(epoch_interval=interval),
     ShowWeights(),
     MyEarlyStopping(300, threshold=5, monitor="fid", mode="min")
