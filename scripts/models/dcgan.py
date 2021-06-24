@@ -332,7 +332,7 @@ class GAN(pl.LightningModule):
                     act_fake[si:ei] = act
 
             if self.hparams.moving_average:
-                self.generator_avg.eval()
+                self.generator_avg.train()
             else:
                 self.generator.train()
 
