@@ -14,10 +14,16 @@ from scripts.callbacks import *
 # POTSDAM CARS
 generator_params = [{"n_layers": 4, "init_channels": 64, "act": "leakyrelu", "bn_mode": "default", "n_blocks": 1},
                     {"n_layers": 4, "init_channels": 64, "act": "leakyrelu",
-                        "bn_mode": "default", "n_blocks": 1, "reconstruct": False}
+                        "bn_mode": "default", "n_blocks": 1, "use_bn_first_conv": False},
+                    {"n_layers": 4, "init_channels": 64, "act": "leakyrelu",
+                        "bn_mode": "default", "n_blocks": 1, "reconstruct": True},
+                    {"n_layers": 4, "init_channels": 64, "act": "leakyrelu", "reconstruct": True,
+                        "bn_mode": "default", "n_blocks": 1, "use_bn_first_conv": False},
                     ]
-discriminator_params = [{"base_channels": 64, "n_layers": 3, "bn_mode": "default", "heat_map": True},
-                        {"base_channels": 32, "n_layers": 4, "bn_mode": "default", "heat_map": True}]
+discriminator_params = [{"base_channels": 32, "n_layers": 4, "bn_mode": "default", "heat_map": True, "heat_map_layer": 2},
+                        {"base_channels": 32, "n_layers": 4,
+                            "bn_mode": "default", "heat_map": True, "heat_map_layer": 3},
+                        {"base_channels": 32, "n_layers": 4, "bn_mode": "default", "heat_map": True, "heat_map_layer": 4}]
 
 beta = 1e-4
 
@@ -40,7 +46,7 @@ transform1 = transforms.Compose([transforms.Resize(img_dim[1:]),
                                 transforms.ToTensor(),
                                 transforms.RandomHorizontalFlip(p=0.5),
                                 transforms.RandomVerticalFlip(p=0.5),
-                                transforms.ColorJitter(hue=[-0.5, 0.5]),
+                                transforms.ColorJitter(hue=[-0.1, 0.5]),
                                 transforms.Normalize([0.5], [0.5])])
 transform2 = transforms.Compose([transforms.Resize(img_dim[1:]),
                                  transforms.ToTensor(),
@@ -48,9 +54,8 @@ transform2 = transforms.Compose([transforms.Resize(img_dim[1:]),
                                  transforms.RandomVerticalFlip(p=0.5),
                                  transforms.Normalize([0.5], [0.5])])
 
-
-for generator_param in generator_params:
-    for discriminator_param in discriminator_params:
+for discriminator_param in discriminator_params:
+    for generator_param in generator_params:
         model = GAN(img_dim, discriminator_params=discriminator_param, fid_interval=interval,
                     generator_params=generator_param, gen_model="unet", beta=beta, rec_loss="l1_channel_avg")
 
