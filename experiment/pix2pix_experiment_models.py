@@ -12,15 +12,11 @@ from scripts.dataloader import *
 from scripts.callbacks import *
 
 # POTSDAM CARS
-generator_params = [("unet", {"n_layers": 4, "init_channels": 64, "act": "leakyrelu",
-                    "bn_mode": "default", "n_blocks": 2, "reconstruction": True}),
-                    ("refiner", {"n_layers": 4, "init_channels": 256, "act": "leakyrelu",
-                                 "bn_mode": "default", "n_layers": 4, "reconstruction": True}),
-                    ("unet", {"n_layers": 4, "init_channels": 64, "act": "leakyrelu",
-                              "bn_mode": "default", "n_blocks": 2, "reconstruction": False}),
-                    ("refiner", {"n_layers": 4, "init_channels": 256, "act": "leakyrelu",
-                                 "bn_mode": "default", "n_layers": 4, "reconstruction": False})]
-discriminator_params = [{"base_channels": 32, "n_layers": 4, "bn_mode": "default"},
+generator_params = [{"n_layers": 4, "init_channels": 64, "act": "leakyrelu", "bn_mode": "default", "n_blocks": 1},
+                    {"n_layers": 4, "init_channels": 64, "act": "leakyrelu",
+                        "bn_mode": "default", "n_blocks": 1, "reconstruct": False}
+                    ]
+discriminator_params = [{"base_channels": 64, "n_layers": 3, "bn_mode": "default", "heat_map": True},
                         {"base_channels": 32, "n_layers": 4, "bn_mode": "default", "heat_map": True}]
 
 beta = 1e-4
@@ -32,7 +28,7 @@ interval = 25
 
 data_dir1 = "/scratch/s7hialtu/potsdam_cars"
 data_dir2 = "/scratch/s7hialtu/artificial_cars"
-results_dir = "/scratch/s7hialtu/pix2pix_unet_model"
+results_dir = "/scratch/s7hialtu/pix2pix_u_net_patchgan"
 
 if not os.path.isdir(data_dir1):
     data_dir1 = "../potsdam_data/potsdam_cars"
@@ -44,7 +40,7 @@ transform1 = transforms.Compose([transforms.Resize(img_dim[1:]),
                                 transforms.ToTensor(),
                                 transforms.RandomHorizontalFlip(p=0.5),
                                 transforms.RandomVerticalFlip(p=0.5),
-                                transforms.ColorJitter(hue=[-0.1, 0.1]),
+                                transforms.ColorJitter(hue=[-0.5, 0.5]),
                                 transforms.Normalize([0.5], [0.5])])
 transform2 = transforms.Compose([transforms.Resize(img_dim[1:]),
                                  transforms.ToTensor(),
@@ -53,10 +49,10 @@ transform2 = transforms.Compose([transforms.Resize(img_dim[1:]),
                                  transforms.Normalize([0.5], [0.5])])
 
 
-for gen_model, generator_param in generator_params:
+for generator_param in generator_params:
     for discriminator_param in discriminator_params:
         model = GAN(img_dim, discriminator_params=discriminator_param, fid_interval=interval,
-                    generator_params=generator_param, gen_model=gen_model, beta=beta)
+                    generator_params=generator_param, gen_model="unet", beta=beta, rec_loss="l1_channel_avg")
 
         potsdam = PostdamCarsDataModule(
             data_dir1, img_size=img_dim[1:], batch_size=batch_size,
@@ -70,7 +66,7 @@ for gen_model, generator_param in generator_params:
                 interpolate_epoch_interval=interval, num_samples=10),
             ModelCheckpoint(period=interval, save_top_k=-
                             1, filename="{epoch}"),
-            EarlyStopping(monitor="fid", patience=20*interval, mode="min"),
+            EarlyStopping(monitor="fid", patience=10*interval, mode="min"),
             Pix2PixCallback(epoch_interval=interval, n_samples=10),
             ShowWeights(),
             MyEarlyStopping(300, threshold=5, monitor="fid", mode="min")
