@@ -46,7 +46,7 @@ transform1 = transforms.Compose([transforms.Resize(img_dim[1:]),
                                 transforms.ToTensor(),
                                 transforms.RandomHorizontalFlip(p=0.5),
                                 transforms.RandomVerticalFlip(p=0.5),
-                                transforms.ColorJitter(hue=[-0.1, 0.5]),
+                                transforms.ColorJitter(hue=[-0.1, 0.1]),
                                 transforms.Normalize([0.5], [0.5])])
 transform2 = transforms.Compose([transforms.Resize(img_dim[1:]),
                                  transforms.ToTensor(),
