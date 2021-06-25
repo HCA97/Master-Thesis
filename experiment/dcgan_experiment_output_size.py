@@ -13,20 +13,26 @@ from scripts.callbacks import *
 
 # POTSDAM CARS
 
-parammeters = [({"n_layers": 5, "init_channels": 1024}, {
-                "base_channels": 32, "n_layers": 5, "heat_map": False}),
-               ({"n_layers": 5, "init_channels": 512}, {
-                "base_channels": 16, "n_layers": 5, "heat_map": False}),
-               ({"n_layers": 4, "init_channels": 512}, {
-                "base_channels": 32, "n_layers": 4, "heat_map": False})]
-use_gp = False
-alpha = 1
+# parammeters = [({"n_layers": 5, "init_channels": 1024}, {
+#                 "base_channels": 32, "n_layers": 5, "heat_map": False}),
+#                ({"n_layers": 5, "init_channels": 512}, {
+#                 "base_channels": 16, "n_layers": 5, "heat_map": False}),
+#                ({"n_layers": 4, "init_channels": 512}, {
+#                 "base_channels": 32, "n_layers": 4, "heat_map": False})]
+
+
+parammeters = [({"n_layers": 5, "init_channels": 1024, "bn_mode": "default", "use_spectral_norm": False},
+                {"base_channels": 32, "n_layers": 5, "heat_map": True, "bn_mode": "default", "use_spectral_norm": False}),
+               ({"n_layers": 5, "init_channels": 1024, "bn_mode": "default", "use_spectral_norm": False},
+                {"base_channels": 32, "n_layers": 5, "heat_map": False, "bn_mode": "default", "use_spectral_norm": False})]
+
 
 img_dim = (3, 64, 128)
 batch_size = 64
 max_epochs = 500
 data_dir = "/scratch/s7hialtu/potsdam_cars"
-results_dir = "/scratch/s7hialtu/dcgan_bigger/big_image"
+results_dir = "/scratch/s7hialtu/big_image"
+interval = 25
 
 if not os.path.isdir(data_dir):
     data_dir = "../potsdam_data/potsdam_cars"
@@ -45,8 +51,9 @@ transform = transforms.Compose([transforms.Resize(img_dim[1:]),
                                 transforms.Normalize([0.5], [0.5])])
 
 for generator_param, discriminator_param in parammeters:
-    model = GAN(img_dim, discriminator_params=discriminator_param,
-                generator_params=generator_param, use_gp=use_gp, alpha=alpha)
+    model = GAN(img_dim,
+                discriminator_params=discriminator_param,
+                generator_params=generator_param)
 
     potsdam = PostdamCarsDataModule(
         data_dir, img_size=img_dim[1:], batch_size=batch_size, transform=transform)
@@ -54,10 +61,14 @@ for generator_param, discriminator_param in parammeters:
 
     callbacks = [
         TensorboardGeneratorSampler(
-            epoch_interval=25, num_samples=batch_size, normalize=True),
+            epoch_interval=interval, num_samples=batch_size, normalize=True),
         LatentDimInterpolator(
-            interpolate_epoch_interval=25, num_samples=10),
-        ModelCheckpoint(period=25, save_top_k=-1, filename="{epoch}")
+            interpolate_epoch_interval=interval, num_samples=10),
+        ModelCheckpoint(period=interval, save_top_k=-1, filename="{epoch}"),
+        EarlyStopping(monitor="fid", patience=20*interval, mode="min"),
+        Pix2PixCallback(epoch_interval=interval),
+        ShowWeights(),
+        MyEarlyStopping(300, threshold=5, monitor="fid", mode="min")
     ]
 
     # Apparently Trainer has logger by default
