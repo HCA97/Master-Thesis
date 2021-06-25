@@ -39,6 +39,7 @@ class GAN(pl.LightningModule):
                  disc_model="basic",
                  gen_init="normal",
                  disc_init="normal",
+                 kappa=1,
                  # GAN Loss
                  use_symmetry_loss=False,
                  gamma=1,
@@ -77,7 +78,7 @@ class GAN(pl.LightningModule):
         # ingerating FID score
         self.n_samples = 1024
         self.act_real = []
-        self.act_samples = 512
+        self.act_samples = 64
         self.gen_input = []
         self.imgs_real = None
 
@@ -188,13 +189,21 @@ class GAN(pl.LightningModule):
                 real = real.requires_grad_(True)
 
             # Train with real
-            real_pred = self.discriminator(real)
-            real_gt = th.ones_like(real_pred)
+            if self.discriminator.heat_map:
+                real_pred, real_patch = self.discriminator(real)
+            else:
+                real_pred = self.discriminator(real)
 
+            # Loss
+            real_gt = th.ones_like(real_pred)
             # Noisy Labels
             if self.hparams.one_sided_label_smoothing:
                 real_gt = 0.9*real_gt
             real_loss = self.criterion(real_pred, real_gt)
+            if self.discriminator.heat_map:
+                real_patch_gt = th.ones_like(real_patch)
+                real_loss += self.hparams.kappa * \
+                    self.criterion(real_patch, real_patch_gt)
 
             # Gradient Penalty (R1)
             gp_loss = 0
@@ -228,7 +237,10 @@ class GAN(pl.LightningModule):
                     for i in range(pick):
                         fake_[i] = self.buffer[idx[i]].to(self.device)
 
-            fake_pred = self.discriminator(fake_)
+            if self.discriminator.heat_map:
+                fake_pred, fake_patch = self.discriminator(fake_)
+            else:
+                fake_pred = self.discriminator(fake_)
 
             if self.hparams.use_buffer:
                 # remember up to 100 iterations
@@ -244,8 +256,9 @@ class GAN(pl.LightningModule):
 
                 # copy predictions, i don't know this much copying is needed
                 fake_pred_copy = fake_pred.detach().cpu().clone()
-                fake_pred_copy = fake_pred_copy.mean(axis=1) if len(
-                    fake_pred_copy.shape) == 2 else fake_pred_copy.mean(axis=(1, 2, 3))
+                fake_pred_copy = fake_pred_copy.mean(axis=1)
+                # fake_pred_copy = fake_pred_copy.mean(axis=1) if len(
+                #     fake_pred_copy.shape) == 2 else fake_pred_copy.mean(axis=(1, 2, 3))
                 idx = th.argsort(fake_pred_copy)  # ascending order
 
                 # store the buffer
@@ -257,9 +270,13 @@ class GAN(pl.LightningModule):
                 else:
                     self.buffer[si:ei] = fake_copy[:pick]
 
+            # Loss
             fake_gt = th.zeros_like(fake_pred)
-
             fake_loss = self.criterion(fake_pred, fake_gt)
+            if self.discriminator.heat_map:
+                fake_patch_gt = th.zeros_like(fake_patch)
+                fake_loss += self.hparams.kappa * \
+                    self.criterion(fake_patch, fake_patch_gt)
 
             # Total Loss
             result = real_loss + fake_loss + gp_loss
@@ -307,10 +324,17 @@ class GAN(pl.LightningModule):
                     th.mean(th.abs(fake_1 - fake_2))
 
             # Gen Loss
-            fake_pred = self.discriminator(fake_)
+            if self.discriminator.heat_map:
+                fake_pred, fake_patch = self.discriminator(fake_)
+            else:
+                fake_pred = self.discriminator(fake_)
             fake_gt = th.ones_like(fake_pred)
 
             gen_loss = self.criterion(fake_pred, fake_gt)
+            if self.discriminator.heat_map:
+                fake_patch_gt = th.ones_like(fake_patch)
+                gen_loss += self.hparams.kappa * \
+                    self.criterion(fake_patch, fake_patch_gt)
 
             # Total Loss
             result = gen_loss + l1_loss + symmetry_loss

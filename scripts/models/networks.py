@@ -69,6 +69,7 @@ class BasicDiscriminator(nn.Module):
                  base_channels=16,
                  n_layers=4,
                  heat_map=False,
+                 heat_map_layer=4,
                  padding=1,
                  bn_mode="old",
                  use_spectral_norm=False,
@@ -76,37 +77,51 @@ class BasicDiscriminator(nn.Module):
         super().__init__()
 
         self.heat_map = heat_map
+        self.heat_map_layer = min(heat_map_layer, n_layers)
         self.n_layers = n_layers
 
         input_channels, input_height, input_width = img_size
 
-        layers = [ConvBlock(input_channels, base_channels, stride=2,
-                            dropout=True, use_bn=use_bn_first_conv, bn_mode=bn_mode)]
+        layers = [ConvBlock(input_channels,
+                            base_channels,
+                            stride=2,
+                            dropout=True,
+                            use_bn=use_bn_first_conv,
+                            bn_mode=bn_mode)]
         for i in range(1, n_layers):
-            layers.append(ConvBlock(base_channels*2**(i-1), base_channels*2**i, stride=2, padding=padding,
-                          dropout=True, bn_mode=bn_mode, use_spectral_norm=use_spectral_norm))
+            layers.append(ConvBlock(base_channels*2**(i-1),
+                                    base_channels*2**i,
+                                    stride=2,
+                                    padding=padding,
+                                    dropout=True,
+                                    bn_mode=bn_mode,
+                                    use_spectral_norm=use_spectral_norm))
 
         self.conv_blocks = nn.Sequential(*layers)
         if self.heat_map:
-            self.l1 = nn.Sequential(
-                nn.Conv2d(base_channels*2**(n_layers-1), 1, kernel_size=3, padding=1), nn.Sigmoid())
-            # I cannot modify it since pytroch used different names for layers
-            # self.l1 = ConvBlock(base_channels*2**(n_layers-1),
-            #                     1, padding=padding, use_bn=False, act="sigmoid")
-        else:
-            output_width, output_height = input_width, input_height
-            for i in range(n_layers):
-                output_width = math.ceil((output_width - 2 + 2*padding) / 2)
-                output_height = math.ceil((output_height - 2 + 2*padding) / 2)
-            ds_size = output_width * output_height
-            self.l1 = nn.Sequential(
-                nn.Linear(base_channels*2**(n_layers-1) * ds_size, 1), nn.Sigmoid())
+            self.patch = ConvBlock(base_channels*2**(self.heat_map_layer-1),
+                                   1,
+                                   padding=padding,
+                                   use_bn=False,
+                                   act="sigmoid")
 
-    def forward(self, img):
-        x = self.conv_blocks(img)
-        if not self.heat_map:
-            x = x.view(x.shape[0], -1)
+        output_width, output_height = input_width, input_height
+        for i in range(n_layers):
+            output_width = math.ceil((output_width - 2 + 2*padding) / 2)
+            output_height = math.ceil((output_height - 2 + 2*padding) / 2)
+        ds_size = output_width * output_height
+        self.l1 = nn.Sequential(
+            nn.Linear(base_channels*2**(n_layers-1) * ds_size, 1), nn.Sigmoid())
+
+    def forward(self, x):
+        for i, layer in enumerate(self.conv_blocks):
+            x = layer(x)
+            if self.heat_map and self.heat_map_layer == i+1:
+                p = self.patch(x)
+        x = x.view(x.shape[0], -1)
         x = self.l1(x)
+        if self.heat_map:
+            return x, p
         return x
 
 # -------------------------------------------------------- #
@@ -164,6 +179,7 @@ class UnetGenerator(nn.Module):
                  reconstruct=False,
                  use_spectral_norm=False,
                  inject_noise=False,
+                 use_bn_first_conv=True,
                  **kwargs):
         super().__init__()
 
@@ -176,7 +192,7 @@ class UnetGenerator(nn.Module):
         self.down = nn.ModuleList()
         self.down.append(
             ConvBlock(n_channels, init_channels,
-                      n_blocks=n_blocks, bn_mode=bn_mode, act=act,
+                      n_blocks=n_blocks, bn_mode=bn_mode, act=act, use_bn=use_bn_first_conv,
                       use_spectral_norm=use_spectral_norm))
         for i in range(1, n_layers-1):
             self.down.append(
@@ -196,10 +212,9 @@ class UnetGenerator(nn.Module):
             block = nn.Sequential(
                 ConvBlock((2**(i - 1) + 2**i)*init_channels,
                           2**(i-1) * init_channels, kernel_size=1, act=act,
-                          bn_mode=bn_mode, use_spectral_norm=use_spectral_norm,
-                          inject_noise=inject_noise),
+                          bn_mode=bn_mode, use_spectral_norm=use_spectral_norm),
                 ConvBlock(2**(i-1) * init_channels, 2**(i-1)
-                          * init_channels, n_blocks=n_blocks,
+                          * init_channels, n_blocks=n_blocks, inject_noise=inject_noise,
                           act=act, bn_mode=bn_mode, use_spectral_norm=use_spectral_norm)
             )
             self.up.append(block)
