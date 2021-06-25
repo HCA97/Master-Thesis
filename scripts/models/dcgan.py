@@ -39,6 +39,9 @@ class GAN(pl.LightningModule):
                  disc_model="basic",
                  gen_init="normal",
                  disc_init="normal",
+                 # GAN Loss
+                 use_symmetry_loss=False,
+                 gamma=1,
                  # For pix2pix reconstruction loss
                  rec_loss="l1",
                  beta=1.0,
@@ -291,6 +294,18 @@ class GAN(pl.LightningModule):
                     len(real), self.generator.latent_dim), device=self.device)
                 fake_ = self.generator(z)
 
+            symmetry_loss = 0
+            if self.hparams.use_symmetry_loss:
+                r = self.hparams.img_dim[1]
+                idx_1 = list(range(0, r//2))
+                idx_2 = list(range(r-1, r//2-1, -1))
+
+                fake_1 = fake_[:, :, idx_1, :]
+                fake_2 = fake_[:, :, idx_2, :]
+
+                symmetry_loss = self.hparams.gamma * \
+                    th.mean(th.abs(fake_1 - fake_2))
+
             # Gen Loss
             fake_pred = self.discriminator(fake_)
             fake_gt = th.ones_like(fake_pred)
@@ -298,12 +313,14 @@ class GAN(pl.LightningModule):
             gen_loss = self.criterion(fake_pred, fake_gt)
 
             # Total Loss
-            result = gen_loss + l1_loss
+            result = gen_loss + l1_loss + symmetry_loss
 
             # Logging
             self.log("loss/gen", gen_loss)
             if self.hparams.gen_model in ["unet", "refiner"]:
                 self.log("loss/gen_l1", l1_loss)
+            if self.hparams.use_symmetry_loss:
+                self.log("loss/gen_symmetry", symmetry_loss)
 
         return result
 
@@ -354,5 +371,6 @@ class GAN(pl.LightningModule):
                 sch2.step(fid)
 
             # log lr
-            opt = self.optimizers(use_pl_optimizer=True)[0]
-            self.log("lr", opt.param_groups[0]["lr"])
+            opt1, opt2 = self.optimizers(use_pl_optimizer=True)
+            self.log("lr/disc", opt1.param_groups[0]["lr"])
+            self.log("lr/gen", opt2.param_groups[0]["lr"])
