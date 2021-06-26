@@ -44,6 +44,70 @@ class EncoderLatent(nn.Module):
 # -------------------------------------------------------- #
 
 
+class PatchDiscriminator(nn.Module):
+    """Simple CNN no fancy layers. It is similar to the
+    https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/dcgan/dcgan.py
+
+    Parameters
+    ----------
+    img_size : list or tuple
+        Input image size (input_channels, input_height, input_width)
+    base_channels : int
+        number channels in first layer
+    n_layers : int
+        number of layers
+
+
+    References
+    ----------
+    Alec Radford and Luke Met and Soumith Chintala. 2016.
+    UNSUPERVISED REPRESENTATION LEARNING WITH DEEP CONVOLUTIONAL GENERATIVE ADVERSARIAL NETWORKS.
+    """
+
+    def __init__(self,
+                 img_size,
+                 base_channels=16,
+                 n_layers=4,
+                 padding=1,
+                 bn_mode="old",
+                 use_dropout=True,
+                 use_spectral_norm=False,
+                 use_bn_first_conv=False):
+        super().__init__()
+
+        self.n_layers = n_layers
+
+        input_channels, input_height, input_width = img_size
+
+        layers = [ConvBlock(input_channels,
+                            base_channels,
+                            stride=2,
+                            dropout=use_dropout,
+                            padding=padding,
+                            use_bn=use_bn_first_conv,
+                            bn_mode=bn_mode)]
+        for i in range(1, n_layers):
+            layers.append(ConvBlock(base_channels*2**(i-1),
+                                    base_channels*2**i,
+                                    stride=2,
+                                    padding=padding,
+                                    dropout=use_dropout,
+                                    bn_mode=bn_mode,
+                                    use_spectral_norm=use_spectral_norm))
+
+        self.conv_blocks = nn.Sequential(*layers)
+        self.l1 = ConvBlock(base_channels*2**(n_layers-1),
+                            1,
+                            padding=padding,
+                            use_bn=False,
+                            act="sigmoid")
+
+    def forward(self, x):
+        x = self.conv_blocks(x)
+        x = self.l1(x)
+        return x
+
+
 class BasicDiscriminator(nn.Module):
     """Simple CNN no fancy layers. It is similar to the
     https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/dcgan/dcgan.py

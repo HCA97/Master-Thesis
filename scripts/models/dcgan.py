@@ -120,6 +120,9 @@ class GAN(pl.LightningModule):
         if self.hparams.disc_model == "basic":
             discriminator = BasicDiscriminator(
                 self.hparams.img_dim, **discriminator_params)
+        elif self.hparams.disc_model == "patch":
+            discriminator = PatchDiscriminator(
+                self.hparams.img_size, **discriminator_params)
         else:
             raise NotImplementedError()
 
@@ -189,7 +192,7 @@ class GAN(pl.LightningModule):
                 real = real.requires_grad_(True)
 
             # Train with real
-            if self.discriminator.heat_map:
+            if self.hparams.disc_model == "basic" and self.discriminator.heat_map:
                 real_pred, real_patch = self.discriminator(real)
             else:
                 real_pred = self.discriminator(real)
@@ -200,7 +203,7 @@ class GAN(pl.LightningModule):
             if self.hparams.one_sided_label_smoothing:
                 real_gt = 0.9*real_gt
             real_loss = self.criterion(real_pred, real_gt)
-            if self.discriminator.heat_map:
+            if self.hparams.disc_model == "basic" and self.discriminator.heat_map:
                 real_patch_gt = th.ones_like(real_patch)
                 real_loss += self.hparams.kappa * \
                     self.criterion(real_patch, real_patch_gt)
@@ -237,7 +240,7 @@ class GAN(pl.LightningModule):
                     for i in range(pick):
                         fake_[i] = self.buffer[idx[i]].to(self.device)
 
-            if self.discriminator.heat_map:
+            if self.hparams.disc_model == "basic" and self.discriminator.heat_map:
                 fake_pred, fake_patch = self.discriminator(fake_)
             else:
                 fake_pred = self.discriminator(fake_)
@@ -256,9 +259,9 @@ class GAN(pl.LightningModule):
 
                 # copy predictions, i don't know this much copying is needed
                 fake_pred_copy = fake_pred.detach().cpu().clone()
-                fake_pred_copy = fake_pred_copy.mean(axis=1)
-                # fake_pred_copy = fake_pred_copy.mean(axis=1) if len(
-                #     fake_pred_copy.shape) == 2 else fake_pred_copy.mean(axis=(1, 2, 3))
+                # fake_pred_copy = fake_pred_copy.mean(axis=1)
+                fake_pred_copy = fake_pred_copy.mean(axis=1) if len(
+                    fake_pred_copy.shape) == 2 else fake_pred_copy.mean(axis=(1, 2, 3))
                 idx = th.argsort(fake_pred_copy)  # ascending order
 
                 # store the buffer
@@ -273,7 +276,7 @@ class GAN(pl.LightningModule):
             # Loss
             fake_gt = th.zeros_like(fake_pred)
             fake_loss = self.criterion(fake_pred, fake_gt)
-            if self.discriminator.heat_map:
+            if self.hparams.disc_model == "basic" and self.discriminator.heat_map:
                 fake_patch_gt = th.zeros_like(fake_patch)
                 fake_loss += self.hparams.kappa * \
                     self.criterion(fake_patch, fake_patch_gt)
@@ -324,14 +327,14 @@ class GAN(pl.LightningModule):
                     th.mean(th.abs(fake_1 - fake_2))
 
             # Gen Loss
-            if self.discriminator.heat_map:
+            if self.hparams.disc_model == "basic" and self.discriminator.heat_map:
                 fake_pred, fake_patch = self.discriminator(fake_)
             else:
                 fake_pred = self.discriminator(fake_)
             fake_gt = th.ones_like(fake_pred)
 
             gen_loss = self.criterion(fake_pred, fake_gt)
-            if self.discriminator.heat_map:
+            if self.hparams.disc_model == "basic" and self.discriminator.heat_map:
                 fake_patch_gt = th.ones_like(fake_patch)
                 gen_loss += self.hparams.kappa * \
                     self.criterion(fake_patch, fake_patch_gt)
