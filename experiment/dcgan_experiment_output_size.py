@@ -12,25 +12,16 @@ from scripts.dataloader import *
 from scripts.callbacks import *
 
 # POTSDAM CARS
-
-# parammeters = [({"n_layers": 5, "init_channels": 1024}, {
-#                 "base_channels": 32, "n_layers": 5, "heat_map": False}),
-#                ({"n_layers": 5, "init_channels": 512}, {
-#                 "base_channels": 16, "n_layers": 5, "heat_map": False}),
-#                ({"n_layers": 4, "init_channels": 512}, {
-#                 "base_channels": 32, "n_layers": 4, "heat_map": False})]
-
-
-parammeters = [({"n_layers": 5, "init_channels": 1024, "bn_mode": "default", "use_spectral_norm": False},
-                {"base_channels": 32, "n_layers": 5, "heat_map": True, "bn_mode": "default", "use_spectral_norm": False}),
-               ({"n_layers": 5, "init_channels": 1024, "bn_mode": "default", "use_spectral_norm": False},
-                {"base_channels": 32, "n_layers": 5, "heat_map": False, "bn_mode": "default", "use_spectral_norm": False})]
+parammeters = [({"n_layers": 5, "init_channels": 1024, "bn_mode": "default"},
+                {"base_channels": 32, "n_layers": 5, "heat_map": True, "heat_map_layer": 5, "bn_mode": "default"}),
+               ({"n_layers": 5, "init_channels": 1024, "bn_mode": "default"},
+                {"base_channels": 32, "n_layers": 5, "heat_map": True, "heat_map_layer": 4, "bn_mode": "default"})]
 
 
 img_dim = (3, 64, 128)
 batch_size = 64
-max_epochs = 500
-data_dir = "/scratch/s7hialtu/potsdam_cars"
+max_epochs = 1000
+data_dir = "/scratch/s7hialtu/potsdam_cars_all"
 results_dir = "/scratch/s7hialtu/big_image"
 interval = 25
 
@@ -65,7 +56,7 @@ for generator_param, discriminator_param in parammeters:
         LatentDimInterpolator(
             interpolate_epoch_interval=interval, num_samples=10),
         ModelCheckpoint(period=interval, save_top_k=-1, filename="{epoch}"),
-        EarlyStopping(monitor="fid", patience=20*interval, mode="min"),
+        EarlyStopping(monitor="fid", patience=10*interval, mode="min"),
         Pix2PixCallback(epoch_interval=interval),
         ShowWeights(),
         MyEarlyStopping(300, threshold=5, monitor="fid", mode="min")
