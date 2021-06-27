@@ -174,9 +174,6 @@ class ConvBlock(nn.Module):
                 self.conv_block.append(nn.Conv2d(in_f if i == 0 else out_f, out_f, kernel_size,
                                                  stride=stride, padding=padding, bias=not use_bn))
 
-            if inject_noise:
-                self.conv_block.append(NoiseLayer(out_f))
-
             if use_bn:
                 if bn_mode == "old":
                     self.conv_block.append(nn.BatchNorm2d(out_f, eps=0.8))
@@ -202,6 +199,9 @@ class ConvBlock(nn.Module):
 
             if dropout:
                 self.conv_block.append(nn.Dropout2d(0.25))
+
+            if inject_noise:
+                self.conv_block.append(NoiseLayer(out_f))
 
     def forward(self, x):
         for layer in self.conv_block:
