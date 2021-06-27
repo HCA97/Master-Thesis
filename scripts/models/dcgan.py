@@ -122,7 +122,7 @@ class GAN(pl.LightningModule):
                 self.hparams.img_dim, **discriminator_params)
         elif self.hparams.disc_model == "patch":
             discriminator = PatchDiscriminator(
-                self.hparams.img_size, **discriminator_params)
+                self.hparams.img_dim, **discriminator_params)
         else:
             raise NotImplementedError()
 
