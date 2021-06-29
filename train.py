@@ -13,7 +13,7 @@ from scripts.callbacks import *
 
 # POTSDAM CARS
 generator_params = {"n_layers": 4, "init_channels": 512,
-                    "bn_mode": "default", "act": "leakyrelu", "use_local_response_norm": True}
+                    "bn_mode": "default", "act": "leakyrelu", "last_layer_kernel_size": 7}
 discriminator_params = {"base_channels": 32,
                         "n_layers": 4, "bn_mode": "default"}
 
@@ -23,7 +23,7 @@ max_epochs = 1000
 interval = 25
 
 data_dir = "/scratch/s7hialtu/potsdam_cars_all"
-results_dir = "/scratch/s7hialtu/dcgan_local_response_norm"
+results_dir = "/scratch/s7hialtu/dcgan_last_layer_kernel_size"
 
 if not os.path.isdir(data_dir):
     data_dir = "../potsdam_data/potsdam_cars_all"

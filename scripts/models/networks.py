@@ -433,8 +433,7 @@ class BasicGenerator(nn.Module):
                  learn_latent=False,
                  use_bn_latent=True,
                  use_spectral_norm=False,
-                 use_local_response_norm=False,
-                 local_response_size=4,
+                 last_layer_kernel_size=3,
                  **kwargs):
         super().__init__()
 
@@ -444,6 +443,10 @@ class BasicGenerator(nn.Module):
         if input_height % scale_factor != 0 or input_width % scale_factor != 0:
             raise AttributeError(
                 f"Input size ({input_width}, {input_height}) must be divisible by scale factor {scale_factor}.")
+
+        if last_layer_kernel_size % 2 == 0:
+            raise AttributeError(
+                f"Last layer kernel size ({last_layer_kernel_size}) must be odd number!")
 
         self.init_height = input_height // scale_factor
         self.init_width = input_width // scale_factor
@@ -494,12 +497,11 @@ class BasicGenerator(nn.Module):
                                     inject_noise=inject_noise,
                                     use_spectral_norm=use_spectral_norm))
 
-        if use_local_response_norm:
-            layers.append(nn.LocalResponseNorm(local_response_size))
-
         # last layer
         layers.append(ConvBlock(self.init_channels // 2**(n_layers-1),
                                 input_channels,
+                                kernel_size=last_layer_kernel_size,
+                                padding=int((last_layer_kernel_size - 1) / 2),
                                 use_bn=False,
                                 use_spectral_norm=False,
                                 act="tanh",

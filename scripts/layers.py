@@ -3,6 +3,37 @@ import torch as th
 from torch.nn.utils import spectral_norm
 
 
+class LRN(nn.Module):
+    def __init__(self, local_size=1, alpha=1.0, beta=0.75, k=1.0, ACROSS_CHANNELS=False):
+        super(LRN, self).__init__()
+        self.ACROSS_CHANNELS = ACROSS_CHANNELS
+        if self.ACROSS_CHANNELS:
+            self.average = nn.AvgPool3d(kernel_size=(local_size, 1, 1),
+                                        stride=1,
+                                        padding=(int((local_size-1.0)/2), 0, 0))
+        else:
+            self.average = nn.AvgPool2d(kernel_size=local_size,
+                                        stride=1,
+                                        padding=int((local_size-1.0)/2))
+        # print(int((local_size-1.0)/2))
+        self.alpha = alpha
+        self.beta = beta
+        self.k = k
+
+    def forward(self, x):
+        if self.ACROSS_CHANNELS:
+            div = x.pow(2).unsqueeze(1)
+            div = self.average(div).squeeze(1)
+            div = div.mul(self.alpha).add(self.k).pow(self.beta)
+        else:
+            div = x.pow(2)
+            div = self.average(div)
+            div = div.mul(self.alpha).add(self.k).pow(self.beta)
+        # print(div.shape, x.shape)
+        x = x.div(div)
+        return x
+
+
 class LinearLayer(nn.Module):
     def __init__(self,
                  in_f,

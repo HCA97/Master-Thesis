@@ -101,7 +101,7 @@ def vgg16_get_activation_maps(imgs: th.Tensor,
 
 
 @th.no_grad()
-def perceptual_path_length(generator, n_samples=1024, epsilon=1e-4, use_slerp=True, device="cpu", truncation=1, batch_size=1024):
+def perceptual_path_length(generator, n_samples=1024, epsilon=1e-4, use_slerp=True, device="cpu", truncation=1, batch_size=1024, net="vgg"):
     """[summary]
 
     Parameters
@@ -139,7 +139,7 @@ def perceptual_path_length(generator, n_samples=1024, epsilon=1e-4, use_slerp=Tr
         raise AttributeError(
             f"Number of samples ({n_samples}) must be divisible by batch size ({batch_size})")
 
-    loss_fn_vgg = lpips.LPIPS(net='vgg').to(device)
+    loss_fn = lpips.LPIPS(net=net).to(device)
     ppl_score = 0
 
     for _ in range(n_samples // batch_size):
@@ -164,7 +164,7 @@ def perceptual_path_length(generator, n_samples=1024, epsilon=1e-4, use_slerp=Tr
         imgs2 = generator(z2)
 
         # compute lpips
-        ppl_score += th.sum(loss_fn_vgg(imgs1, imgs2,
+        ppl_score += th.sum(loss_fn(imgs1, imgs2,
                             normalize=True)).item() / n_samples
 
     # return mean lpips
