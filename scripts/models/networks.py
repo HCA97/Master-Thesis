@@ -433,6 +433,8 @@ class BasicGenerator(nn.Module):
                  learn_latent=False,
                  use_bn_latent=True,
                  use_spectral_norm=False,
+                 use_local_response_norm=False,
+                 local_response_size=4,
                  **kwargs):
         super().__init__()
 
@@ -491,6 +493,9 @@ class BasicGenerator(nn.Module):
                                     act=act, bn_mode=bn_mode,
                                     inject_noise=inject_noise,
                                     use_spectral_norm=use_spectral_norm))
+
+        if use_local_response_norm:
+            layers.append(nn.LocalResponseNorm(local_response_size))
 
         # last layer
         layers.append(ConvBlock(self.init_channels // 2**(n_layers-1),
