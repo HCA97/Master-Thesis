@@ -107,11 +107,15 @@ class GAN(pl.LightningModule):
         elif self.hparams.gen_model == "refiner":
             generator = RefinerNet(
                 n_channels=self.hparams.img_dim[0], **generator_params)
+        elif self.hparams.gen_model == "stylegan":
+            generator = StyleGan(self.hparams.img_dim, **generator_params)
         else:
             raise NotImplementedError()
 
         if self.hparams.gen_init == "normal":
             generator.apply(weights_init_normal)
+        if self.hparams.gen_init == "stylegan":
+            generator.apply(weights_init_stylegan)
         return generator
 
     def get_discriminator(self, discriminator_params):

@@ -1,16 +1,27 @@
 import math
+from typing import List, Union
+
+
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
+
 from ..layers import *
 
-#
-#
+
+# ------------------------------------------------------- #
+#              GAN Losses                                 #
+# ------------------------------------------------------- #
+
+# class L2_norm
+
+# ------------------------------------------------------- #
+#           GAN INVERSION                                 #
 # ------------------------------------------------------- #
 
 
 class EncoderLatent(nn.Module):
-    def __init__(self, generator):
+    def __init__(self, generator: nn.Module):
         super().__init__()
 
         self.generator = generator
@@ -25,7 +36,7 @@ class EncoderLatent(nn.Module):
             ConvBlock(64, 128, bn_mode="default", use_bn=True),
             nn.MaxPool2d(2, 2),
             ConvBlock(128, 256, bn_mode="default", use_bn=True),
-            #ConvBlock(256, 256, bn_mode="default", use_bn=True),
+            # ConvBlock(256, 256, bn_mode="default", use_bn=True),
             nn.MaxPool2d(2, 2)
         )
 
@@ -42,6 +53,56 @@ class EncoderLatent(nn.Module):
 # -------------------------------------------------------- #
 #                   Discriminators                         #
 # -------------------------------------------------------- #
+
+class MultiDiscriminator(nn.Module):
+    """https://github.com/eriklindernoren/PyTorch-GAN/blob/36d3c77e5ff20ebe0aeefd322326a134a279b93e/implementations/munit/models.py#L197"""
+
+    def __init__(self, img_size, n_res=3, base_channels=64, use_instance_norm=True, use_sigmoid=False, use_spectral_norm=True, use_dropout=False):
+        super().__init__()
+
+        input_channels, input_height, input_width = img_size
+
+        self.n_res = n_res
+
+        self.multi_res1 = PatchDiscriminator(img_size,
+                                             base_channels=base_channels,
+                                             kernel_size=4,
+                                             padding=1,
+                                             use_instance_norm=use_instance_norm,
+                                             use_sigmoid=use_sigmoid,
+                                             use_spectral_norm=use_spectral_norm,
+                                             use_dropout=use_dropout)
+        self.multi_res2 = PatchDiscriminator(img_size,
+                                             base_channels=base_channels,
+                                             kernel_size=4,
+                                             padding=1,
+                                             use_instance_norm=use_instance_norm,
+                                             use_sigmoid=use_sigmoid,
+                                             use_spectral_norm=use_spectral_norm,
+                                             use_dropout=use_dropout)
+        self.multi_res3 = PatchDiscriminator(img_size,
+                                             base_channels=base_channels,
+                                             kernel_size=4,
+                                             padding=1,
+                                             use_instance_norm=use_instance_norm,
+                                             use_sigmoid=use_sigmoid,
+                                             use_spectral_norm=use_spectral_norm,
+                                             use_dropout=use_dropout)
+        self.downsample = nn.AvgPool2d(3, padding=1, stride=2)
+
+    def forward(self, x):
+        x1 = self.multi_res1(x)
+        if self.n_res == 1:
+            return x1
+
+        x = self.downsample(x)
+        x2 = self.multi_res2(x)
+        if self.n_res == 2:
+            return [x1, x2]
+
+        x = self.downsample(x)
+        x3 = self.multi_res3(x)
+        return [x1, x2, x3]
 
 
 class PatchDiscriminator(nn.Module):
@@ -67,9 +128,12 @@ class PatchDiscriminator(nn.Module):
     def __init__(self,
                  img_size,
                  base_channels=16,
+                 kernel_size=3,
                  n_layers=4,
                  padding=1,
                  bn_mode="old",
+                 use_instance_norm=False,
+                 use_sigmoid=True,
                  use_dropout=True,
                  use_spectral_norm=False,
                  use_bn_first_conv=False):
@@ -84,23 +148,31 @@ class PatchDiscriminator(nn.Module):
                             stride=2,
                             dropout=use_dropout,
                             padding=padding,
+                            use_instance_norm=False,
+                            use_spectral_norm=use_spectral_norm,
                             use_bn=use_bn_first_conv,
+                            kernel_size=kernel_size,
                             bn_mode=bn_mode)]
         for i in range(1, n_layers):
             layers.append(ConvBlock(base_channels*2**(i-1),
                                     base_channels*2**i,
                                     stride=2,
+                                    kernel_size=kernel_size,
                                     padding=padding,
                                     dropout=use_dropout,
+                                    use_instance_norm=use_instance_norm,
+                                    use_bn=not use_instance_norm,
                                     bn_mode=bn_mode,
                                     use_spectral_norm=use_spectral_norm))
 
         self.conv_blocks = nn.Sequential(*layers)
         self.l1 = ConvBlock(base_channels*2**(n_layers-1),
                             1,
-                            padding=padding,
+                            kernel_size=3,
+                            padding=1,
+                            use_instance_norm=False,
                             use_bn=False,
-                            act="sigmoid")
+                            act="sigmoid" if use_sigmoid else "linear")
 
     def forward(self, x):
         x = self.conv_blocks(x)
@@ -135,6 +207,9 @@ class BasicDiscriminator(nn.Module):
                  heat_map=False,
                  heat_map_layer=4,
                  padding=1,
+                 use_instance_norm=False,
+                 use_dropout=True,
+                 use_sigmoid=True,
                  bn_mode="old",
                  use_spectral_norm=False,
                  use_bn_first_conv=False):
@@ -149,7 +224,8 @@ class BasicDiscriminator(nn.Module):
         layers = [ConvBlock(input_channels,
                             base_channels,
                             stride=2,
-                            dropout=True,
+                            dropout=use_dropout,
+                            use_instance_norm=False,
                             use_bn=use_bn_first_conv,
                             bn_mode=bn_mode)]
         for i in range(1, n_layers):
@@ -157,7 +233,9 @@ class BasicDiscriminator(nn.Module):
                                     base_channels*2**i,
                                     stride=2,
                                     padding=padding,
-                                    dropout=True,
+                                    dropout=use_dropout,
+                                    use_instance_norm=use_instance_norm,
+                                    use_bn=not use_instance_norm,
                                     bn_mode=bn_mode,
                                     use_spectral_norm=use_spectral_norm))
 
@@ -167,7 +245,7 @@ class BasicDiscriminator(nn.Module):
                                    1,
                                    padding=padding,
                                    use_bn=False,
-                                   act="sigmoid")
+                                   act="sigmoid" if use_sigmoid else "linear")
 
         output_width, output_height = input_width, input_height
         for i in range(n_layers):
@@ -175,7 +253,8 @@ class BasicDiscriminator(nn.Module):
             output_height = math.ceil((output_height - 2 + 2*padding) / 2)
         ds_size = output_width * output_height
         self.l1 = nn.Sequential(
-            nn.Linear(base_channels*2**(n_layers-1) * ds_size, 1), nn.Sigmoid())
+            nn.Linear(base_channels*2**(n_layers-1) * ds_size, 1),
+            nn.Sigmoid() if use_sigmoid else nn.Identity())
 
     def forward(self, x):
         for i, layer in enumerate(self.conv_blocks):
@@ -185,12 +264,231 @@ class BasicDiscriminator(nn.Module):
         x = x.view(x.shape[0], -1)
         x = self.l1(x)
         if self.heat_map:
-            return x, p
+            return [x, p]
         return x
 
 # -------------------------------------------------------- #
 #                       Generators                         #
 # -------------------------------------------------------- #
+
+
+class MUNITGEN(nn.Module):
+    def __init__(self, img_dim, base_channels=64, use_spectral_norm=True, style_dim=8, act="relu"):
+        super().__init__()
+
+        self.encoder1 = MUNITEncoder(
+            img_dim, base_channels=base_channels, use_spectral_norm=use_spectral_norm, act=act, style_dim=style_dim)
+        self.decoder1 = MUNITDecoder(
+            img_dim, base_channels=base_channels, use_spectral_norm=use_spectral_norm, act=act)
+
+        self.encoder2 = MUNITEncoder(
+            img_dim, base_channels=base_channels, use_spectral_norm=use_spectral_norm, act=act, style_dim=style_dim)
+        self.decoder2 = MUNITDecoder(
+            img_dim, base_channels=base_channels, use_spectral_norm=use_spectral_norm, act=act)
+
+        self.style_dim = style_dim
+
+    def forward(self, x1, x2, inference=False):
+
+        c1, s1 = self.encoder1(x1)
+        s1_ = th.normal(0, 1, size=(
+            x1.size(0), self.style_dim), device=x1.device)
+
+        if inference:
+            return self.decoder2(c1, s1_)
+
+        c2, s2 = self.encoder2(x2)
+        s2_ = th.normal(0, 1, size=(
+            x2.size(0), self.style_dim), device=x2.device)
+
+        x11 = self.decoder1(c1, s1)
+        x22 = self.decoder1(c2, s2)
+
+        x12 = self.decoder2(c1, s1_)
+        x21 = self.decoder1(c2, s2_)
+
+        c12, s12 = self.encoder2(x12)
+        c21, s21 = self.encoder1(x21)
+
+        x121 = self.decoder1(c12, s1)
+        x212 = self.decoder2(c21, s2)
+
+        return [x11, x22, x12, x21, x121, x212], [c1, s1, c2, s2, c12, s12]
+
+
+class MUNITDecoder(nn.Module):
+    def __init__(self, img_size, base_channels=64, use_spectral_norm=True, style_dim=8, act="relu"):
+        super().__init__()
+
+        input_channels, input_height, input_width = img_size
+
+        self.upsample = nn.Sequential(
+            nn.Upsample(scale_factor=2),
+            ConvBlock(4*base_channels, 2*base_channels,
+                      kernel_size=5,
+                      padding=2,
+                      act=act,
+                      use_bn=False,
+                      use_instance_norm=False,
+                      use_spectral_norm=use_spectral_norm),
+            nn.Upsample(scale_factor=2),
+            ConvBlock(2*base_channels, base_channels,
+                      kernel_size=5,
+                      padding=2,
+                      act=act,
+                      use_bn=False,
+                      use_instance_norm=False,
+                      use_spectral_norm=use_spectral_norm),
+            ConvBlock(base_channels, input_channels,
+                      kernel_size=7,
+                      padding=3,
+                      act="tanh",
+                      use_bn=False,
+                      use_instance_norm=False,
+                      use_spectral_norm=use_spectral_norm),
+
+        )
+
+        n_layers = 3
+
+        self.mlps1 = nn.ModuleList([LinearLayer(
+            style_dim, 2*4*base_channels, use_bn=False, act=act, n_blocks=3) for i in range(n_layers)])
+        self.mlps2 = nn.ModuleList([LinearLayer(
+            style_dim, 2*4*base_channels, use_bn=False, act=act, n_blocks=3) for i in range(n_layers)])
+
+        self.resblocks1 = nn.ModuleList(
+            [nn.Conv2d(4*base_channels, 4*base_channels, 3,
+                       padding=1, bias=False) for i in range(n_layers)]
+        )
+        self.resblocks2 = nn.ModuleList(
+            [nn.Conv2d(4*base_channels, 4*base_channels, 3,
+                       padding=1, bias=False) for i in range(n_layers)]
+        )
+
+        # normalization and non linearity
+        self.ad = AdaIN()
+        if act == "relu":
+            self.act = nn.ReLU(inplace=True)
+        elif act == "leakyrelu":
+            self.act = nn.LeakyReLU(0.2, inplace=True)
+
+    def forward(self, c, s):
+
+        for mlp1, mlp2, conv1, conv2 in zip(self.mlps1, self.mlps2, self.resblocks1, self.resblocks2):
+            x = conv1(c)
+            y = mlp1(s)
+            x = self.ad(x, y)
+            x = self.act(x)
+
+            x = conv2(x)
+            y = mlp2(s)
+            x = self.ad(x, y)
+            c = self.act(x + c)
+
+        # print(c.shape)
+
+        x = self.upsample(c)
+        # print(x.shape)
+        return x
+
+
+class MUNITEncoder(nn.Module):
+    def __init__(self, img_size, base_channels=64, use_spectral_norm=True, style_dim=8, act="relu"):
+        super().__init__()
+
+        input_channels, input_height, input_width = img_size
+
+        self.content_enc = nn.Sequential(
+            ConvBlock(input_channels, base_channels,
+                      kernel_size=7,
+                      use_instance_norm=True,
+                      use_bn=False,
+                      padding=3,
+                      act=act,
+                      use_spectral_norm=use_spectral_norm),
+            ConvBlock(base_channels, 2*base_channels,
+                      kernel_size=4,
+                      stride=2,
+                      use_instance_norm=True,
+                      use_bn=False,
+                      padding=1,
+                      act=act,
+                      use_spectral_norm=use_spectral_norm),
+            ConvBlock(2*base_channels, 4*base_channels,
+                      kernel_size=4,
+                      stride=2,
+                      padding=1,
+                      use_instance_norm=True,
+                      use_bn=False,
+                      act=act,
+                      use_spectral_norm=use_spectral_norm),
+            ResBlock(4*base_channels, 4*base_channels,
+                     act=act,
+                     use_instance_norm=True,
+                     use_spectral_norm=use_spectral_norm),
+            ResBlock(4*base_channels, 4*base_channels,
+                     act=act,
+                     use_instance_norm=True,
+                     use_spectral_norm=use_spectral_norm),
+            ResBlock(4*base_channels, 4*base_channels,
+                     act=act,
+                     use_instance_norm=True,
+                     use_spectral_norm=use_spectral_norm),
+            ResBlock(4*base_channels, 4*base_channels,
+                     act=act,
+                     use_instance_norm=True,
+                     use_spectral_norm=use_spectral_norm),
+        )
+        self.style_enc = nn.Sequential(
+            ConvBlock(input_channels, base_channels,
+                      kernel_size=7,
+                      use_instance_norm=True,
+                      use_bn=False,
+                      padding=3,
+                      act=act,
+                      use_spectral_norm=use_spectral_norm),
+            ConvBlock(base_channels, 2*base_channels,
+                      kernel_size=4,
+                      stride=2,
+                      use_instance_norm=True,
+                      use_bn=False,
+                      padding=1,
+                      act=act,
+                      use_spectral_norm=use_spectral_norm),
+            ConvBlock(2*base_channels, 4*base_channels,
+                      kernel_size=4,
+                      stride=2,
+                      padding=1,
+                      use_instance_norm=True,
+                      use_bn=False,
+                      act=act,
+                      use_spectral_norm=use_spectral_norm),
+            ConvBlock(4*base_channels, 4*base_channels,
+                      kernel_size=4,
+                      stride=2,
+                      padding=1,
+                      use_instance_norm=True,
+                      use_bn=False,
+                      act=act,
+                      use_spectral_norm=use_spectral_norm),
+            ConvBlock(4*base_channels, 4*base_channels,
+                      kernel_size=4,
+                      stride=2,
+                      padding=1,
+                      use_instance_norm=True,
+                      use_bn=False,
+                      act=act,
+                      use_spectral_norm=use_spectral_norm),
+            nn.AdaptiveAvgPool2d(1)
+        )
+        self.style_enc_l1 = nn.Linear(4*base_channels, style_dim)
+
+    def forward(self, x):
+        c = self.content_enc(x)
+        s = self.style_enc(x)
+        s = s.view(x.shape[0], -1)
+        s = self.style_enc_l1(s)
+        return c, s
 
 
 class RefinerNet(nn.Module):
@@ -517,4 +815,219 @@ class BasicGenerator(nn.Module):
         x = x.view(x.shape[0], self.init_channels,
                    self.init_height, self.init_width)
         x = self.conv_blocks(x)
+        return x
+
+
+class StyleGan(nn.Module):
+    """
+    """
+
+    def __init__(self,
+                 img_size,
+                 latent_dim=100,
+                 init_channels=512,
+                 n_layers=4,
+                 act="leakyrelu",
+                 inject_noise=False,
+                 bn_mode="default",
+                 use_spectral_norm=False,
+                 last_layer_kernel_size=3,
+                 **kwargs):
+        super().__init__()
+
+        input_channels, input_height, input_width = img_size
+
+        scale_factor = 2**(n_layers-1)
+        if input_height % scale_factor != 0 or input_width % scale_factor != 0:
+            raise AttributeError(
+                f"Input size ({input_width}, {input_height}) must be divisible by scale factor {scale_factor}.")
+
+        if last_layer_kernel_size % 2 == 0:
+            raise AttributeError(
+                f"Last layer kernel size ({last_layer_kernel_size}) must be odd number!")
+
+        self.init_height = input_height // scale_factor
+        self.init_width = input_width // scale_factor
+        self.latent_dim = latent_dim
+        self.init_channels = init_channels
+        self.n_layers = n_layers
+
+        self.w = LinearLayer(
+            self.latent_dim, self.latent_dim,
+            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=4)
+
+        self.mlp11 = LinearLayer(
+            self.latent_dim, 2 * self.init_channels,
+            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
+        self.mlp21 = LinearLayer(
+            self.latent_dim, self.init_channels,
+            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
+        self.mlp31 = LinearLayer(
+            self.latent_dim, self.init_channels // 2,
+            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
+        self.mlp41 = LinearLayer(
+            self.latent_dim, self.init_channels // 4,
+            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
+        self.mlp51 = LinearLayer(
+            self.latent_dim, self.init_channels // 8,
+            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
+
+        self.mlp12 = LinearLayer(
+            self.latent_dim, 2 * self.init_channels,
+            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
+        self.mlp22 = LinearLayer(
+            self.latent_dim, self.init_channels,
+            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
+        self.mlp32 = LinearLayer(
+            self.latent_dim, self.init_channels // 2,
+            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
+        self.mlp42 = LinearLayer(
+            self.latent_dim, self.init_channels // 4,
+            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
+        self.mlp52 = LinearLayer(
+            self.latent_dim, self.init_channels // 8,
+            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
+
+        self.conv11 = ConvBlock(self.init_channels,
+                                self.init_channels,
+                                use_spectral_norm=use_spectral_norm,
+                                inject_noise=inject_noise,
+                                act=act,
+                                bn_mode=bn_mode)
+        self.conv12 = ConvBlock(self.init_channels,
+                                self.init_channels,
+                                use_spectral_norm=use_spectral_norm,
+                                inject_noise=inject_noise,
+                                act=act,
+                                bn_mode=bn_mode)
+
+        self.conv21 = ConvBlock(self.init_channels,
+                                self.init_channels // 2,
+                                use_spectral_norm=use_spectral_norm,
+                                inject_noise=inject_noise,
+                                act=act,
+                                bn_mode=bn_mode)
+        self.conv22 = ConvBlock(self.init_channels // 2,
+                                self.init_channels // 2,
+                                use_spectral_norm=use_spectral_norm,
+                                inject_noise=inject_noise,
+                                act=act,
+                                bn_mode=bn_mode)
+
+        self.conv31 = ConvBlock(self.init_channels // 2,
+                                self.init_channels // 4,
+                                use_spectral_norm=use_spectral_norm,
+                                inject_noise=inject_noise,
+                                act=act,
+                                bn_mode=bn_mode)
+        self.conv32 = ConvBlock(self.init_channels // 4,
+                                self.init_channels // 4,
+                                use_spectral_norm=use_spectral_norm,
+                                inject_noise=inject_noise,
+                                act=act,
+                                bn_mode=bn_mode)
+
+        self.conv41 = ConvBlock(self.init_channels // 4,
+                                self.init_channels // 8,
+                                use_spectral_norm=use_spectral_norm,
+                                inject_noise=inject_noise,
+                                act=act,
+                                bn_mode=bn_mode)
+        self.conv42 = ConvBlock(self.init_channels // 8,
+                                self.init_channels // 8,
+                                use_spectral_norm=use_spectral_norm,
+                                inject_noise=inject_noise,
+                                act=act,
+                                bn_mode=bn_mode)
+
+        self.conv51 = ConvBlock(self.init_channels // 8,
+                                self.init_channels // 16,
+                                use_spectral_norm=use_spectral_norm,
+                                inject_noise=inject_noise,
+                                act=act,
+                                bn_mode=bn_mode)
+        self.conv52 = ConvBlock(self.init_channels // 16,
+                                self.init_channels // 16,
+                                use_spectral_norm=use_spectral_norm,
+                                act=act,
+                                bn_mode=bn_mode)
+
+        self.final = ConvBlock(self.init_channels // (16 if n_layers == 5 else 8),
+                               input_channels,
+                               kernel_size=last_layer_kernel_size,
+                               padding=int((last_layer_kernel_size - 1) / 2),
+                               use_bn=False,
+                               use_spectral_norm=False,
+                               inject_noise=False,
+                               act="tanh",
+                               bn_mode=bn_mode)
+
+        self.upsample = nn.Sequential(
+            nn.Upsample(scale_factor=2),
+            nn.AvgPool2d(3, stride=1, padding=1))
+
+        self.ad = AdaIN()
+
+    def forward(self, z):
+        w = z.view(z.shape[0], self.latent_dim)
+        w = self.w(w)
+
+        c = th.ones(size=(z.shape[0], self.init_channels, self.init_height,
+                          self.init_width), device=z.device, dtype=z.dtype)
+
+        # 4x8
+        x = self.conv11(c)
+        y = self.mlp11(w)
+        x = self.ad(x, y)
+
+        x = self.conv12(x)
+        y = self.mlp12(w)
+        x = self.ad(x, y)
+
+        x = self.upsample(x)
+
+        # 8x16
+        x = self.conv21(x)
+        y = self.mlp21(w)
+        x = self.ad(x, y)
+
+        x = self.conv22(x)
+        y = self.mlp22(w)
+        x = self.ad(x, y)
+
+        x = self.upsample(x)
+
+        # 16x32
+        x = self.conv31(x)
+        y = self.mlp31(w)
+        x = self.ad(x, y)
+
+        x = self.conv32(x)
+        y = self.mlp32(w)
+        x = self.ad(x, y)
+
+        x = self.upsample(x)
+
+        # 32x64
+        x = self.conv41(x)
+        y = self.mlp41(w)
+        x = self.ad(x, y)
+
+        x = self.conv42(x)
+        y = self.mlp42(w)
+        x = self.ad(x, y)
+
+        if self.n_layers == 5:
+            x = self.upsample(x)
+
+            # 64x128
+            x = self.conv51(x)
+            y = self.mlp51(w)
+            x = self.ad(x, y)
+
+            x = self.conv52(x)
+            y = self.mlp52(w)
+            x = self.ad(x, y)
+
+        x = self.final(x)
         return x

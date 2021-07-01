@@ -4,6 +4,8 @@ from torch.nn.utils import spectral_norm
 
 
 class LRN(nn.Module):
+    """https://github.com/jiecaoyu/pytorch_imagenet/blob/984a2a988ba17b37e1173dd2518fa0f4dc4a1879/networks/model_list/alexnet.py#L9"""
+
     def __init__(self, local_size=1, alpha=1.0, beta=0.75, k=1.0, ACROSS_CHANNELS=False):
         super(LRN, self).__init__()
         self.ACROSS_CHANNELS = ACROSS_CHANNELS
@@ -15,7 +17,6 @@ class LRN(nn.Module):
             self.average = nn.AvgPool2d(kernel_size=local_size,
                                         stride=1,
                                         padding=int((local_size-1.0)/2))
-        # print(int((local_size-1.0)/2))
         self.alpha = alpha
         self.beta = beta
         self.k = k
@@ -29,7 +30,6 @@ class LRN(nn.Module):
             div = x.pow(2)
             div = self.average(div)
             div = div.mul(self.alpha).add(self.k).pow(self.beta)
-        # print(div.shape, x.shape)
         x = x.div(div)
         return x
 
@@ -118,17 +118,46 @@ class NoiseLayer(nn.Module):
         return x
 
 
+class AdaIN(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x, y):
+        x_mu = th.mean(x, dim=(2, 3)).view(x.shape[0], x.shape[1], 1, 1)
+        x_sigma = th.std(x, dim=(2, 3)).view(x.shape[0], x.shape[1], 1, 1)
+        gamma = y[:, :x.shape[1]].view(x.shape[0], x.shape[1], 1, 1)
+        beta = y[:, x.shape[1]:].view(x.shape[0], x.shape[1], 1, 1)
+
+        # print(x_sigma.shape, x_mu.shape, gamma.shape, beta.shape, x.shape)
+
+        return gamma * (x - x_mu) / (x_sigma + 1e-8) + beta
+
+
 class ResBlock(nn.Module):
-    def __init__(self, in_f, out_f, act="leakyrelu", inject_noise=False, bn_mode="old", use_spectral_norm=False):
+    def __init__(self, in_f, out_f, act="leakyrelu", inject_noise=False, use_instance_norm=False, bn_mode="old", use_spectral_norm=False):
         super().__init__()
         self.projection = None
         if in_f != out_f:
-            self.projection = ConvBlock(
-                in_f, out_f, act=act, inject_noise=inject_noise, bn_mode=bn_mode, use_spectral_norm=use_spectral_norm)
+            self.projection = ConvBlock(in_f, out_f,
+                                        act=act,
+                                        inject_noise=inject_noise,
+                                        use_instance_norm=use_instance_norm,
+                                        use_bn=not use_instance_norm,
+                                        bn_mode=bn_mode,
+                                        use_spectral_norm=use_spectral_norm)
         self.conv_block = nn.Sequential(
-            ConvBlock(out_f, out_f, act=act,
-                      inject_noise=inject_noise, bn_mode=bn_mode),
-            ConvBlock(out_f, out_f, act="linear", bn_mode=bn_mode,
+            ConvBlock(out_f, out_f,
+                      act=act,
+                      use_instance_norm=use_instance_norm,
+                      use_bn=not use_instance_norm,
+                      inject_noise=inject_noise,
+                      bn_mode=bn_mode),
+            ConvBlock(out_f, out_f,
+                      act="linear",
+                      bn_mode=bn_mode,
+                      use_instance_norm=use_instance_norm,
+                      use_bn=not use_instance_norm,
                       use_spectral_norm=use_spectral_norm)
         )
         self.act = nn.LeakyReLU(
@@ -181,6 +210,7 @@ class ConvBlock(nn.Module):
                  stride=1,
                  dropout=False,
                  use_bn=True,
+                 use_instance_norm=False,
                  act="leakyrelu",
                  padding=1,
                  n_blocks=1,
@@ -205,7 +235,9 @@ class ConvBlock(nn.Module):
                 self.conv_block.append(nn.Conv2d(in_f if i == 0 else out_f, out_f, kernel_size,
                                                  stride=stride, padding=padding, bias=not use_bn))
 
-            if use_bn:
+            if use_instance_norm:
+                self.conv_block.append(nn.InstanceNorm2d(out_f))
+            elif use_bn:
                 if bn_mode == "old":
                     self.conv_block.append(nn.BatchNorm2d(out_f, eps=0.8))
                 elif bn_mode == "momentum":

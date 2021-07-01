@@ -7,6 +7,53 @@ import torchvision
 import lpips
 
 
+def compute_loss(predictions: Union[th.Tensor, List[th.Tensor]], label: int, criteria: th.nn.Module):
+    """[summary]
+
+    Parameters
+    ----------
+    predictions : Union[th.Tensor, List[th.Tensor]]
+        [description]
+    label : int
+        [description]
+    criteria : th.nn.Module
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
+    loss = 0
+    if type(predictions) == list:
+        for prediction in predictions:
+            gt = label*th.ones_like(prediction,
+                                    dtype=prediction.dtype, device=prediction.device)
+            loss += criteria(prediction, gt)
+    elif type(predictions) == th.Tensor:
+        gt = label*th.ones_like(predictions,
+                                dtype=predictions.dtype, device=predictions.device)
+        loss += criteria(predictions, gt)
+    return loss
+
+
+def weights_init_stylegan(m):
+    classname = m.__class__.__name__
+    if classname.find("Conv") != -1:
+        try:
+            th.nn.init.normal_(m.weight.data, 0.0, 1)
+        except:
+            pass
+    elif classname.find("Linear") != -1:
+        try:
+            th.nn.init.normal_(m.weight.data, 0.0, 1)
+        except:
+            pass
+    elif classname.find("BatchNorm2d") != -1:
+        th.nn.init.normal_(m.weight.data, 1.0, 1)
+        th.nn.init.constant_(m.bias.data, 0.0)
+
+
 def weights_init_normal(m):
     """Initialize weights with normal distribution"""
     classname = m.__class__.__name__
