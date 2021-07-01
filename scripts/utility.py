@@ -62,6 +62,11 @@ def weights_init_normal(m):
             th.nn.init.normal_(m.weight.data, 0.0, 0.02)
         except:
             pass
+    elif classname.find("Linear") != -1:
+        try:
+            th.nn.init.normal_(m.weight.data, 0.0, 0.02)
+        except:
+            pass
     elif classname.find("BatchNorm2d") != -1:
         th.nn.init.normal_(m.weight.data, 1.0, 0.02)
         th.nn.init.constant_(m.bias.data, 0.0)
