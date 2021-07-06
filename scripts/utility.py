@@ -108,7 +108,8 @@ def vgg16_get_activation_maps(imgs: th.Tensor,
                               device: str,
                               normalize_range: Tuple[int, int],
                               global_pooling: bool = True,
-                              use_bn: bool = True) -> th.Tensor:
+                              use_bn: bool = True,
+                              img_dim: Tuple[int, int] = (32, 64)) -> th.Tensor:
     """Get activation maps of VGG-16 with BN.
 
     Parameters
@@ -131,13 +132,10 @@ def vgg16_get_activation_maps(imgs: th.Tensor,
         device) if not use_bn else torchvision.models.vgg16_bn(pretrained=True).features.to(device)
     features.eval()
 
-    # for param in features.parameters():
-    #     param.requires_grad = False
-
     # normalize imgs for VGG-16:
     min_, max_ = normalize_range
     imgs_norm = (imgs - min_) / (max_ - min_)
-    x = torchvision.transforms.Compose([torchvision.transforms.Resize((32, 64)),
+    x = torchvision.transforms.Compose([torchvision.transforms.Resize(img_dim),
                                         torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                                                          std=[0.229, 0.224, 0.225])])(imgs_norm)
     x = x.to(device)

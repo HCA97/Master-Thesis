@@ -34,6 +34,21 @@ class MyEarlyStopping(Callback):
                 raise KeyboardInterrupt("Interrupted by my early stopping")
 
 
+class MUNITCallback(Callback):
+    def __init__(self, epoch_interval=1, n_samples=5, normalize=True):
+        super().__init__()
+
+        self.epoch_interval = epoch_interval
+        self.n_samples = n_samples
+        self.normalize = normalize
+
+    def on_epoch_end(self, trainer, pl_module):
+        if pl_module.__class__.__name__ == "GAN":
+            return
+        elif (trainer.current_epoch + 1) % self.epoch_interval == 0 or trainer.current_epoch == 0:
+            pass
+
+
 class Pix2PixCallback(Callback):
     def __init__(self, epoch_interval=1, n_samples=5, normalize=True):
         super().__init__()
@@ -44,44 +59,47 @@ class Pix2PixCallback(Callback):
 
     def on_epoch_end(self, trainer, pl_module):
 
-        if (trainer.current_epoch + 1) % self.epoch_interval == 0 or trainer.current_epoch == 0:
-            if pl_module.hparams.gen_model in ["unet", "refiner"]:
-                pl_module.eval()
+        if pl_module.__class__.__name__ != "GAN":
+            return
+        elif pl_module.hparams.gen_model not in ["unet", "refiner"]:
+            return
+        elif (trainer.current_epoch + 1) % self.epoch_interval == 0 or trainer.current_epoch == 0:
+            pl_module.eval()
 
-                n_gen_input = min(len(pl_module.gen_input), self.n_samples)
-                n_imgs_real = min(len(pl_module.imgs_real), self.n_samples)
+            n_gen_input = min(len(pl_module.gen_input), self.n_samples)
+            n_imgs_real = min(len(pl_module.imgs_real), self.n_samples)
 
-                # pick n_samples fake cases
-                gen_input = pl_module.gen_input[:n_gen_input]
-                imgs_fake = pl_module(gen_input)
+            # pick n_samples fake cases
+            gen_input = pl_module.gen_input[:n_gen_input]
+            imgs_fake = pl_module(gen_input)
 
-                # make a grid
-                imgs = th.cat(
-                    [gen_input, imgs_fake, imgs_fake - gen_input], dim=0)
-                grid = torchvision.utils.make_grid(
-                    imgs, nrow=n_gen_input, normalize=self.normalize)
+            # make a grid
+            imgs = th.cat(
+                [gen_input, imgs_fake, imgs_fake - gen_input], dim=0)
+            grid = torchvision.utils.make_grid(
+                imgs, nrow=n_gen_input, normalize=self.normalize)
 
-                # logging
-                str_title = f'{pl_module.__class__.__name__}_gen_fake_imgs'
-                trainer.logger.experiment.add_image(
-                    str_title, grid, global_step=trainer.current_epoch)
+            # logging
+            str_title = f'{pl_module.__class__.__name__}_gen_fake_imgs'
+            trainer.logger.experiment.add_image(
+                str_title, grid, global_step=trainer.current_epoch)
 
-                # pick n_samples real cases
-                gen_input = pl_module.imgs_real[:n_imgs_real]
-                imgs_fake = pl_module(gen_input)
+            # pick n_samples real cases
+            gen_input = pl_module.imgs_real[:n_imgs_real]
+            imgs_fake = pl_module(gen_input)
 
-                # make a grid
-                imgs = th.cat(
-                    [gen_input, imgs_fake, imgs_fake - gen_input], dim=0)
-                grid = torchvision.utils.make_grid(
-                    imgs, nrow=n_imgs_real, normalize=self.normalize)
+            # make a grid
+            imgs = th.cat(
+                [gen_input, imgs_fake, imgs_fake - gen_input], dim=0)
+            grid = torchvision.utils.make_grid(
+                imgs, nrow=n_imgs_real, normalize=self.normalize)
 
-                # logging
-                str_title = f'{pl_module.__class__.__name__}_gen_real_imgs'
-                trainer.logger.experiment.add_image(
-                    str_title, grid, global_step=trainer.current_epoch)
+            # logging
+            str_title = f'{pl_module.__class__.__name__}_gen_real_imgs'
+            trainer.logger.experiment.add_image(
+                str_title, grid, global_step=trainer.current_epoch)
 
-                pl_module.train()
+            pl_module.train()
 
 
 class ShowWeights(Callback):
@@ -140,17 +158,20 @@ class LatentDimInterpolator(Callback):
 
     def on_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
 
-        if (trainer.current_epoch + 1) % self.interpolate_epoch_interval == 0 or trainer.current_epoch == 0:
-            if pl_module.hparams.gen_model not in ["unet", "refiner"]:
-                images = self.interpolate_latent_space(pl_module)
-                # images = th.cat(images, dim=0)  # type: ignore[assignment]
+        if pl_module.__class__.__name__ != "GAN":
+            return
+        elif pl_module.hparams.gen_model in ["unet", "refiner"]:
+            return
+        elif (trainer.current_epoch + 1) % self.interpolate_epoch_interval == 0 or trainer.current_epoch == 0:
+            images = self.interpolate_latent_space(pl_module)
 
-                num_rows = self.steps + 2
-                grid = torchvision.utils.make_grid(
-                    images, nrow=num_rows, normalize=self.normalize)
-                str_title = f'{pl_module.__class__.__name__}_latent_space'
-                trainer.logger.experiment.add_image(
-                    str_title, grid, global_step=trainer.current_epoch)
+            grid = torchvision.utils.make_grid(
+                images, nrow=self.steps + 2, normalize=self.normalize)
+
+            str_title = f'{pl_module.__class__.__name__}_latent_space'
+
+            trainer.logger.experiment.add_image(
+                str_title, grid, global_step=trainer.current_epoch)
 
     def interpolate_latent_space(self, pl_module: LightningModule, truncation: float = 1) -> List[Tensor]:
         images = []
@@ -246,28 +267,31 @@ class TensorboardGeneratorSampler(Callback):
 
     def on_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
 
-        if (trainer.current_epoch + 1) % self.epoch_interval == 0 or trainer.current_epoch == 0:
-            if pl_module.hparams.gen_model not in ["unet", "refiner"]:
-                dim = (self.num_samples, pl_module.generator.latent_dim, 1, 1)
-                if self.z is None:
-                    self.z = th.normal(mean=0.0, std=1.0, size=dim,
-                                       device=pl_module.device)
+        if pl_module.__class__.__name__ != "GAN":
+            return
+        elif pl_module.hparams.gen_model in ["unet", "refiner"]:
+            return
+        elif (trainer.current_epoch + 1) % self.epoch_interval == 0 or trainer.current_epoch == 0:
+            dim = (self.num_samples, pl_module.generator.latent_dim, 1, 1)
+            if self.z is None:
+                self.z = th.normal(mean=0.0, std=1.0, size=dim,
+                                   device=pl_module.device)
 
-                # generate images
-                with th.no_grad():
-                    pl_module.eval()
-                    images = pl_module(self.z)
-                    pl_module.train()
+            # generate images
+            with th.no_grad():
+                pl_module.eval()
+                images = pl_module(self.z)
+                pl_module.train()
 
-                grid = torchvision.utils.make_grid(
-                    tensor=images,
-                    nrow=self.nrow,
-                    padding=self.padding,
-                    normalize=self.normalize,
-                    range=self.norm_range,
-                    scale_each=self.scale_each,
-                    pad_value=self.pad_value,
-                )
-                str_title = f"{pl_module.__class__.__name__}_images"
-                trainer.logger.experiment.add_image(
-                    str_title, grid, global_step=trainer.current_epoch)
+            grid = torchvision.utils.make_grid(
+                tensor=images,
+                nrow=self.nrow,
+                padding=self.padding,
+                normalize=self.normalize,
+                range=self.norm_range,
+                scale_each=self.scale_each,
+                pad_value=self.pad_value,
+            )
+            str_title = f"{pl_module.__class__.__name__}_images"
+            trainer.logger.experiment.add_image(
+                str_title, grid, global_step=trainer.current_epoch)

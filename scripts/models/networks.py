@@ -64,45 +64,70 @@ class MultiDiscriminator(nn.Module):
 
         self.n_res = n_res
 
-        self.multi_res1 = PatchDiscriminator(img_size,
-                                             base_channels=base_channels,
-                                             kernel_size=4,
-                                             padding=1,
-                                             use_instance_norm=use_instance_norm,
-                                             use_sigmoid=use_sigmoid,
-                                             use_spectral_norm=use_spectral_norm,
-                                             use_dropout=use_dropout)
-        self.multi_res2 = PatchDiscriminator(img_size,
-                                             base_channels=base_channels,
-                                             kernel_size=4,
-                                             padding=1,
-                                             use_instance_norm=use_instance_norm,
-                                             use_sigmoid=use_sigmoid,
-                                             use_spectral_norm=use_spectral_norm,
-                                             use_dropout=use_dropout)
-        self.multi_res3 = PatchDiscriminator(img_size,
-                                             base_channels=base_channels,
-                                             kernel_size=4,
-                                             padding=1,
-                                             use_instance_norm=use_instance_norm,
-                                             use_sigmoid=use_sigmoid,
-                                             use_spectral_norm=use_spectral_norm,
-                                             use_dropout=use_dropout)
+        # IMAGE DOMAIN 1
+        self.multi_res1 = nn.ModuleList(
+            [PatchDiscriminator(img_size,
+                                base_channels=base_channels,
+                                kernel_size=4,
+                                padding=1,
+                                use_instance_norm=use_instance_norm,
+                                use_sigmoid=use_sigmoid,
+                                use_spectral_norm=use_spectral_norm,
+                                use_dropout=use_dropout),
+             PatchDiscriminator(img_size,
+                                base_channels=base_channels,
+                                kernel_size=4,
+                                padding=1,
+                                use_instance_norm=use_instance_norm,
+                                use_sigmoid=use_sigmoid,
+                                use_spectral_norm=use_spectral_norm,
+                                use_dropout=use_dropout),
+             PatchDiscriminator(img_size,
+                                base_channels=base_channels,
+                                kernel_size=4,
+                                padding=1,
+                                use_instance_norm=use_instance_norm,
+                                use_sigmoid=use_sigmoid,
+                                use_spectral_norm=use_spectral_norm,
+                                use_dropout=use_dropout)]
+        )
+
+        # IMAGE DOMAIN 2
+        self.multi_res2 = nn.ModuleList(
+            [PatchDiscriminator(img_size,
+                                base_channels=base_channels,
+                                kernel_size=4,
+                                padding=1,
+                                use_instance_norm=use_instance_norm,
+                                use_sigmoid=use_sigmoid,
+                                use_spectral_norm=use_spectral_norm,
+                                use_dropout=use_dropout),
+             PatchDiscriminator(img_size,
+                                base_channels=base_channels,
+                                kernel_size=4,
+                                padding=1,
+                                use_instance_norm=use_instance_norm,
+                                use_sigmoid=use_sigmoid,
+                                use_spectral_norm=use_spectral_norm,
+                                use_dropout=use_dropout),
+             PatchDiscriminator(img_size,
+                                base_channels=base_channels,
+                                kernel_size=4,
+                                padding=1,
+                                use_instance_norm=use_instance_norm,
+                                use_sigmoid=use_sigmoid,
+                                use_spectral_norm=use_spectral_norm,
+                                use_dropout=use_dropout)]
+        )
+
         self.downsample = nn.AvgPool2d(3, padding=1, stride=2)
 
-    def forward(self, x):
-        x1 = self.multi_res1(x)
-        if self.n_res == 1:
-            return x1
-
-        x = self.downsample(x)
-        x2 = self.multi_res2(x)
-        if self.n_res == 2:
-            return [x1, x2]
-
-        x = self.downsample(x)
-        x3 = self.multi_res3(x)
-        return [x1, x2, x3]
+    def forward(self, x, label):
+        ret = []
+        for disc1, disc2 in zip(self.multi_res1,  self.multi_res2):
+            ret.append(disc1(x) if label == 1 else disc2(x))
+            x = self.downsample(x)
+        return ret
 
 
 class PatchDiscriminator(nn.Module):
@@ -174,7 +199,7 @@ class PatchDiscriminator(nn.Module):
                             use_bn=False,
                             act="sigmoid" if use_sigmoid else "linear")
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         x = self.conv_blocks(x)
         x = self.l1(x)
         return x
@@ -256,7 +281,7 @@ class BasicDiscriminator(nn.Module):
             nn.Linear(base_channels*2**(n_layers-1) * ds_size, 1),
             nn.Sigmoid() if use_sigmoid else nn.Identity())
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         for i, layer in enumerate(self.conv_blocks):
             x = layer(x)
             if self.heat_map and self.heat_map_layer == i+1:
@@ -266,6 +291,7 @@ class BasicDiscriminator(nn.Module):
         if self.heat_map:
             return [x, p]
         return x
+
 
 # -------------------------------------------------------- #
 #                       Generators                         #
@@ -294,9 +320,6 @@ class MUNITGEN(nn.Module):
         s1_ = th.normal(0, 1, size=(
             x1.size(0), self.style_dim), device=x1.device)
 
-        if inference:
-            return self.decoder2(c1, s1_)
-
         c2, s2 = self.encoder2(x2)
         s2_ = th.normal(0, 1, size=(
             x2.size(0), self.style_dim), device=x2.device)
@@ -307,13 +330,22 @@ class MUNITGEN(nn.Module):
         x12 = self.decoder2(c1, s1_)
         x21 = self.decoder1(c2, s2_)
 
+        if inference:
+            return x12, x21
+
         c12, s12 = self.encoder2(x12)
         c21, s21 = self.encoder1(x21)
 
         x121 = self.decoder1(c12, s1)
         x212 = self.decoder2(c21, s2)
 
-        return [x11, x22, x12, x21, x121, x212], [c1, s1, c2, s2, c12, s12]
+        # compute all the regularization
+        loss_rec = th.mean(th.abs(x11 - x1)) + th.mean(th.abs(x22 - x2))
+        loss_s = th.mean(th.abs(s12, s1_)) + th.mean(th.abs(s21, s2_))
+        loss_c = th.mean(th.abs(c12, c1.detach())) + \
+            th.mean(th.abs(c21, c2.detach()))
+        loss_cyc = th.mean(th.abs(x121 - x1)) + th.mean(th.abs(x212 - x2))
+        return [x12, x21], [loss_rec, loss_s, loss_c, loss_cyc]
 
 
 class MUNITDecoder(nn.Module):
