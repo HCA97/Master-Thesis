@@ -43,10 +43,41 @@ class MUNITCallback(Callback):
         self.normalize = normalize
 
     def on_epoch_end(self, trainer, pl_module):
-        if pl_module.__class__.__name__ == "GAN":
+        if pl_module.__class__.__name__ != "MUNIT":
             return
         elif (trainer.current_epoch + 1) % self.epoch_interval == 0 or trainer.current_epoch == 0:
-            pass
+            pl_module.eval()
+            x1, x2 = pl_module.imgs_fake, pl_module.imgs_real
+
+            len1 = min(self.n_samples, len(x1))
+            len2 = min(self.n_samples, len(x2))
+
+            x12, x21, x121, x212, x11, x22 = pl_module.forward(
+                x1[:len1], x2[:len2], True)
+
+            # fake images - make a grid
+            imgs = th.cat(
+                [x1[:len1], x11, x12, x121], dim=0)
+            grid = torchvision.utils.make_grid(
+                imgs, nrow=len1, normalize=self.normalize)
+
+            # fake images - logging
+            str_title = f'{pl_module.__class__.__name__}_gen_fake_imgs'
+            trainer.logger.experiment.add_image(
+                str_title, grid, global_step=trainer.current_epoch)
+
+            # real images - make a grid
+            imgs = th.cat(
+                [x2[:len2], x22, x21, x212], dim=0)
+            grid = torchvision.utils.make_grid(
+                imgs, nrow=len2, normalize=self.normalize)
+
+            # logging
+            str_title = f'{pl_module.__class__.__name__}_gen_real_imgs'
+            trainer.logger.experiment.add_image(
+                str_title, grid, global_step=trainer.current_epoch)
+
+            pl_module.train()
 
 
 class Pix2PixCallback(Callback):
@@ -112,9 +143,11 @@ class ShowWeights(Callback):
         if (trainer.current_epoch + 1) % self.epoch_interval == 0 or trainer.current_epoch == 0:
             writer = trainer.logger.experiment
 
+            moving_avg = getattr(pl_module.hparams, "moving_avg", False)
+
             pl_module.eval()
             with th.no_grad():
-                if pl_module.hparams.moving_average:
+                if moving_avg:
                     for (name, params), params_avg in zip(pl_module.generator.named_parameters(), pl_module.generator_avg.parameters()):
                         if params.grad is not None:
                             writer.add_histogram(
