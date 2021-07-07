@@ -1,4 +1,5 @@
 from typing import Tuple, List, Union
+import math
 
 import numpy as np
 from scipy.linalg import sqrtm
@@ -70,6 +71,29 @@ def weights_init_normal(m):
     elif classname.find("BatchNorm2d") != -1:
         th.nn.init.normal_(m.weight.data, 1.0, 0.02)
         th.nn.init.constant_(m.bias.data, 0.0)
+
+
+def weights_init(init_type='gaussian'):
+    """https://github.com/NVlabs/MUNIT/blob/bcf8cca2e4934019608a26846526434c5ed86fb5/utils.py"""
+    def init_fun(m):
+        classname = m.__class__.__name__
+        if (classname.find('Conv') != -1 or classname.find('Linear') != -1) and hasattr(m, 'weight'):
+            try:
+                if init_type == 'gaussian':
+                    th.nn.init.normal_(m.weight.data, 0.0, 0.02)
+                elif init_type == 'xavier':
+                    th.nn.init.xavier_normal_(m.weight.data, gain=math.sqrt(2))
+                elif init_type == 'kaiming':
+                    th.nn.init.kaiming_normal_(
+                        m.weight.data, a=0, mode='fan_in')
+                elif init_type == 'orthogonal':
+                    th.nn.init.orthogonal_(m.weight.data, gain=math.sqrt(2))
+                if hasattr(m, 'bias') and m.bias is not None:
+                    init.constant_(m.bias.data, 0.0)
+            except:
+                pass
+
+    return init_fun
 
 
 def interpolate(p1: th.Tensor, p2: th.Tensor, ratio: float, use_slerp: bool) -> th.Tensor:
