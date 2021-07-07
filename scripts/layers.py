@@ -135,7 +135,7 @@ class AdaIN(nn.Module):
 
 
 class ResBlock(nn.Module):
-    def __init__(self, in_f, out_f, act="leakyrelu", inject_noise=False, use_instance_norm=False, bn_mode="old", use_spectral_norm=False):
+    def __init__(self, in_f, out_f, act="leakyrelu", inject_noise=False, use_instance_norm=False, bn_mode="old", padding_mode="zeros", use_spectral_norm=False):
         super().__init__()
         self.projection = None
         if in_f != out_f:
@@ -145,6 +145,7 @@ class ResBlock(nn.Module):
                                         use_instance_norm=use_instance_norm,
                                         use_bn=not use_instance_norm,
                                         bn_mode=bn_mode,
+                                        padding_mode=padding_mode,
                                         use_spectral_norm=use_spectral_norm)
         self.conv_block = nn.Sequential(
             ConvBlock(out_f, out_f,
@@ -152,12 +153,14 @@ class ResBlock(nn.Module):
                       use_instance_norm=use_instance_norm,
                       use_bn=not use_instance_norm,
                       inject_noise=inject_noise,
+                      padding_mode=padding_mode,
                       bn_mode=bn_mode),
             ConvBlock(out_f, out_f,
                       act="linear",
                       bn_mode=bn_mode,
                       use_instance_norm=use_instance_norm,
                       use_bn=not use_instance_norm,
+                      padding_mode=padding_mode,
                       use_spectral_norm=use_spectral_norm)
         )
         self.act = nn.LeakyReLU(
@@ -213,6 +216,7 @@ class ConvBlock(nn.Module):
                  use_instance_norm=False,
                  act="leakyrelu",
                  padding=1,
+                 padding_mode="zeros",
                  n_blocks=1,
                  inject_noise=False,
                  bn_mode="old",
@@ -228,12 +232,12 @@ class ConvBlock(nn.Module):
             if use_spectral_norm:
                 self.conv_block.append(
                     spectral_norm(nn.Conv2d(in_f if i == 0 else out_f, out_f, kernel_size,
-                                            stride=stride, padding=padding, bias=not use_bn))
+                                            stride=stride, padding_mode=padding_mode, padding=padding, bias=not use_bn))
                 )
 
             else:
                 self.conv_block.append(nn.Conv2d(in_f if i == 0 else out_f, out_f, kernel_size,
-                                                 stride=stride, padding=padding, bias=not use_bn))
+                                                 stride=stride, padding_mode=padding_mode, padding=padding, bias=not use_bn))
 
             if use_instance_norm:
                 self.conv_block.append(nn.InstanceNorm2d(out_f))
