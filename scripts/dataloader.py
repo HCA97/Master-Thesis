@@ -72,7 +72,7 @@ class PostdamCarsDataModule(LightningModule):
         if transform:
             self.transform1 = transform
         if transform2:
-            self.transfrom2 = transform2
+            self.transform2 = transform2
 
     def setup(self, state=None):
         self.has_setup_fit = True
