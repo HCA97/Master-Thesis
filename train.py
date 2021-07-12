@@ -12,18 +12,20 @@ from scripts.dataloader import *
 from scripts.callbacks import *
 
 # POTSDAM CARS
-generator_params = {"n_layers": 4, "init_channels": 512, "padding_mode": "reflect",
-                    "bn_mode": "default", "act": "leakyrelu", "last_layer_kernel_size": 3}
-discriminator_params = {"base_channels": 64, "padding_mode": "reflect",
-                        "n_layers": 4, "bn_mode": "default"}
+generator_params = {"n_layers": 4, "init_channels": 512, "padding_mode": "reflect", "kernel_size": 5, "inject_noise": True, "use_spectral_norm": True,
+                    "bn_mode": "default", "act": "leakyrelu", "last_layer_kernel_size": 5}
+discriminator_params = {"base_channels": 64, "n_layers": 5, "heat_map": False,
+                        "bn_mode": "default", "use_spectral_norm": True}
 
-img_dim = (3, 32, 64)
+img_dim = (3, 64, 128)
 batch_size = 64
 max_epochs = 1000
 interval = 25
+alpha = 0.1
+use_gp = True
 
 data_dir = "/scratch/s7hialtu/potsdam_cars_all"
-results_dir = "/scratch/s7hialtu/dcgan_disc_double_params_padding_reflect"
+results_dir = "/scratch/s7hialtu/dcgan_stylegan"
 
 if not os.path.isdir(data_dir):
     data_dir = "../potsdam_data/potsdam_cars_all"
@@ -39,7 +41,7 @@ transform = transforms.Compose([transforms.Resize(img_dim[1:]),
                                 transforms.Normalize([0.5], [0.5])])
 
 model = GAN(img_dim, discriminator_params=discriminator_params, fid_interval=interval, disc_model="basic",
-            generator_params=generator_params, gen_model="basic")
+            generator_params=generator_params, gen_model="stylegan", alpha=alpha, use_gp=use_gp, use_lr_scheduler=True)
 
 potsdam = PostdamCarsDataModule(
     data_dir, img_size=img_dim[1:], batch_size=batch_size, transform=transform)
