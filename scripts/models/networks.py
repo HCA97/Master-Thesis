@@ -29,7 +29,7 @@ class HingeLoss(nn.Module):
 
 
 class EncoderLatent(nn.Module):
-    def __init__(self, generator: nn.Module):
+    def __init__(self, generator: nn.Module, img_dim=(3, 32, 64), base_channels=32, n_layers=4, n_blocks=1):
         super().__init__()
 
         self.generator = generator
@@ -48,6 +48,11 @@ class EncoderLatent(nn.Module):
             nn.MaxPool2d(2, 2)
         )
 
+        output_width, output_height = input_width, input_height
+        for i in range(n_layers):
+            output_width = math.ceil((output_width - 2 + 2*padding) / 2)
+            output_height = math.ceil((output_height - 2 + 2*padding) / 2)
+        ds_size = output_width * output_height
         self.l1 = nn.Linear(2*4*256, 100)
 
     def forward(self, img):
@@ -77,7 +82,7 @@ class MultiDiscriminator(nn.Module):
             [PatchDiscriminator(img_size,
                                 base_channels=base_channels,
                                 kernel_size=kernel_size,
-                                padding=1,
+                                padding=int((kernel_size - 1) / 2),
                                 use_instance_norm=use_instance_norm,
                                 use_sigmoid=use_sigmoid,
                                 use_spectral_norm=use_spectral_norm,
@@ -91,7 +96,7 @@ class MultiDiscriminator(nn.Module):
             [PatchDiscriminator(img_size,
                                 base_channels=base_channels,
                                 kernel_size=kernel_size,
-                                padding=1,
+                                padding=int((kernel_size - 1) / 2),
                                 use_instance_norm=use_instance_norm,
                                 use_sigmoid=use_sigmoid,
                                 use_spectral_norm=use_spectral_norm,
@@ -605,7 +610,7 @@ class UnetGenerator(nn.Module):
             self.up.append(block)
 
         self.final = ConvBlock(
-            init_channels, 3, use_bn=False, act="tanh", bn_mode=bn_mode, padding_mode=padding_mode)
+            init_channels, n_channels, use_bn=False, act="tanh", bn_mode=bn_mode, padding_mode=padding_mode)
 
     def forward(self, x_in):
 
@@ -748,8 +753,6 @@ class BasicGenerator(nn.Module):
                  init_channels=128,
                  n_layers=2,
                  act="leakyrelu",
-                 learn_upsample=False,
-                 use_1x1_conv=True,
                  inject_noise=False,
                  bn_mode="old",
                  learn_latent=False,
@@ -757,6 +760,7 @@ class BasicGenerator(nn.Module):
                  use_spectral_norm=False,
                  last_layer_kernel_size=3,
                  padding_mode="zeros",
+                 kernel_size=3,
                  **kwargs):
         super().__init__()
 
@@ -770,6 +774,10 @@ class BasicGenerator(nn.Module):
         if last_layer_kernel_size % 2 == 0:
             raise AttributeError(
                 f"Last layer kernel size ({last_layer_kernel_size}) must be odd number!")
+
+        padding = int((kernel_size - 1) / 2)
+        # padding = 2
+        # print(padding)
 
         self.init_height = input_height // scale_factor
         self.init_width = input_width // scale_factor
@@ -789,39 +797,25 @@ class BasicGenerator(nn.Module):
         # first layer
         layers = [nn.BatchNorm2d(self.init_channels),
                   nn.Upsample(scale_factor=2)]
-        if learn_upsample:
-            layers.append(ConvBlock(self.init_channels,
-                                    self.init_channels,
-                                    use_spectral_norm=use_spectral_norm,
-                                    kernel_size=1 if use_1x1_conv else 3,
-                                    act=act,
-                                    padding_mode=padding_mode,
-                                    bn_mode=bn_mode))
         layers.append(ConvBlock(self.init_channels,
                                 self.init_channels,
                                 act=act,
                                 bn_mode=bn_mode,
                                 inject_noise=inject_noise,
                                 padding_mode=padding_mode,
+                                padding=1,
+                                kernel_size=3,
                                 use_spectral_norm=use_spectral_norm))
 
         # middle layer
         for i in range(1, n_layers):
             layers.append(nn.Upsample(scale_factor=2))
-            if learn_upsample:
-                layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
-                                        self.init_channels // 2 ** (i-1),
-                                        kernel_size=1 if use_1x1_conv else 3,
-                                        act=act,
-                                        bn_mode=bn_mode,
-                                        padding_mode=padding_mode,
-                                        use_spectral_norm=use_spectral_norm))
-
             layers.append(ConvBlock(self.init_channels // 2 ** (i-1),
                                     self.init_channels // 2 ** i,
                                     act=act, bn_mode=bn_mode,
                                     inject_noise=inject_noise,
                                     padding_mode=padding_mode,
+                                    kernel_size=3,
                                     use_spectral_norm=use_spectral_norm))
 
         # last layer
@@ -860,6 +854,8 @@ class StyleGan(nn.Module):
                  act="leakyrelu",
                  inject_noise=False,
                  bn_mode="default",
+                 kernel_size=3,
+                 padding_mode="reflect",
                  use_spectral_norm=False,
                  last_layer_kernel_size=3,
                  **kwargs):
@@ -867,7 +863,7 @@ class StyleGan(nn.Module):
 
         input_channels, input_height, input_width = img_size
 
-        scale_factor = 2**(n_layers-1)
+        scale_factor = 2**n_layers
         if input_height % scale_factor != 0 or input_width % scale_factor != 0:
             raise AttributeError(
                 f"Input size ({input_width}, {input_height}) must be divisible by scale factor {scale_factor}.")
@@ -881,183 +877,59 @@ class StyleGan(nn.Module):
         self.latent_dim = latent_dim
         self.init_channels = init_channels
         self.n_layers = n_layers
+        padding = int((kernel_size - 1) / 2)
 
         self.w = LinearLayer(
             self.latent_dim, self.latent_dim,
-            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=4)
+            use_bn=True, use_spectral_norm=use_spectral_norm, n_blocks=4)
 
-        self.mlp11 = LinearLayer(
-            self.latent_dim, 2 * self.init_channels,
-            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
-        self.mlp21 = LinearLayer(
-            self.latent_dim, self.init_channels,
-            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
-        self.mlp31 = LinearLayer(
-            self.latent_dim, self.init_channels // 2,
-            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
-        self.mlp41 = LinearLayer(
-            self.latent_dim, self.init_channels // 4,
-            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
-        self.mlp51 = LinearLayer(
-            self.latent_dim, self.init_channels // 8,
-            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
+        self.mlps = nn.ModuleList([
+            LinearLayer(
+                self.latent_dim, 2 * self.init_channels // 2**i, skip_bn_first_layer=False,
+                use_bn=True, use_spectral_norm=use_spectral_norm, n_blocks=2)
+            for i in range(n_layers)
+        ])
 
-        self.mlp12 = LinearLayer(
-            self.latent_dim, 2 * self.init_channels,
-            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
-        self.mlp22 = LinearLayer(
-            self.latent_dim, self.init_channels,
-            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
-        self.mlp32 = LinearLayer(
-            self.latent_dim, self.init_channels // 2,
-            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
-        self.mlp42 = LinearLayer(
-            self.latent_dim, self.init_channels // 4,
-            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
-        self.mlp52 = LinearLayer(
-            self.latent_dim, self.init_channels // 8,
-            use_bn=False, use_spectral_norm=use_spectral_norm, n_blocks=2)
+        self.convs = nn.ModuleList([
+            ConvBlock(self.init_channels // 2**(i-1 if i > 0 else i),
+                      self.init_channels // 2**i,
+                      use_spectral_norm=use_spectral_norm,
+                      inject_noise=inject_noise,
+                      act=act,
+                      use_bn=True,
+                      padding=padding,
+                      padding_mode=padding_mode,
+                      kernel_size=kernel_size,
+                      use_instance_norm=False,
+                      bn_mode=bn_mode)
+            for i in range(n_layers)
+        ])
 
-        self.conv11 = ConvBlock(self.init_channels,
-                                self.init_channels,
-                                use_spectral_norm=use_spectral_norm,
-                                inject_noise=inject_noise,
-                                act=act,
-                                bn_mode=bn_mode)
-        self.conv12 = ConvBlock(self.init_channels,
-                                self.init_channels,
-                                use_spectral_norm=use_spectral_norm,
-                                inject_noise=inject_noise,
-                                act=act,
-                                bn_mode=bn_mode)
-
-        self.conv21 = ConvBlock(self.init_channels,
-                                self.init_channels // 2,
-                                use_spectral_norm=use_spectral_norm,
-                                inject_noise=inject_noise,
-                                act=act,
-                                bn_mode=bn_mode)
-        self.conv22 = ConvBlock(self.init_channels // 2,
-                                self.init_channels // 2,
-                                use_spectral_norm=use_spectral_norm,
-                                inject_noise=inject_noise,
-                                act=act,
-                                bn_mode=bn_mode)
-
-        self.conv31 = ConvBlock(self.init_channels // 2,
-                                self.init_channels // 4,
-                                use_spectral_norm=use_spectral_norm,
-                                inject_noise=inject_noise,
-                                act=act,
-                                bn_mode=bn_mode)
-        self.conv32 = ConvBlock(self.init_channels // 4,
-                                self.init_channels // 4,
-                                use_spectral_norm=use_spectral_norm,
-                                inject_noise=inject_noise,
-                                act=act,
-                                bn_mode=bn_mode)
-
-        self.conv41 = ConvBlock(self.init_channels // 4,
-                                self.init_channels // 8,
-                                use_spectral_norm=use_spectral_norm,
-                                inject_noise=inject_noise,
-                                act=act,
-                                bn_mode=bn_mode)
-        self.conv42 = ConvBlock(self.init_channels // 8,
-                                self.init_channels // 8,
-                                use_spectral_norm=use_spectral_norm,
-                                inject_noise=inject_noise,
-                                act=act,
-                                bn_mode=bn_mode)
-
-        self.conv51 = ConvBlock(self.init_channels // 8,
-                                self.init_channels // 16,
-                                use_spectral_norm=use_spectral_norm,
-                                inject_noise=inject_noise,
-                                act=act,
-                                bn_mode=bn_mode)
-        self.conv52 = ConvBlock(self.init_channels // 16,
-                                self.init_channels // 16,
-                                use_spectral_norm=use_spectral_norm,
-                                act=act,
-                                bn_mode=bn_mode)
-
-        self.final = ConvBlock(self.init_channels // (16 if n_layers == 5 else 8),
+        self.final = ConvBlock(self.init_channels // 2**(n_layers - 1),
                                input_channels,
                                kernel_size=last_layer_kernel_size,
                                padding=int((last_layer_kernel_size - 1) / 2),
                                use_bn=False,
                                use_spectral_norm=False,
                                inject_noise=False,
+                               padding_mode=padding_mode,
                                act="tanh",
                                bn_mode=bn_mode)
 
-        self.upsample = nn.Sequential(
-            nn.Upsample(scale_factor=2),
-            nn.AvgPool2d(3, stride=1, padding=1))
-
+        self.upsample = nn.Upsample(scale_factor=2)
         self.ad = AdaIN()
 
     def forward(self, z):
         w = z.view(z.shape[0], self.latent_dim)
         w = self.w(w)
 
-        c = th.ones(size=(z.shape[0], self.init_channels, self.init_height,
+        x = th.ones(size=(z.shape[0], self.init_channels, self.init_height,
                           self.init_width), device=z.device, dtype=z.dtype)
-
-        # 4x8
-        x = self.conv11(c)
-        y = self.mlp11(w)
-        x = self.ad(x, y)
-
-        x = self.conv12(x)
-        y = self.mlp12(w)
-        x = self.ad(x, y)
-
-        x = self.upsample(x)
-
-        # 8x16
-        x = self.conv21(x)
-        y = self.mlp21(w)
-        x = self.ad(x, y)
-
-        x = self.conv22(x)
-        y = self.mlp22(w)
-        x = self.ad(x, y)
-
-        x = self.upsample(x)
-
-        # 16x32
-        x = self.conv31(x)
-        y = self.mlp31(w)
-        x = self.ad(x, y)
-
-        x = self.conv32(x)
-        y = self.mlp32(w)
-        x = self.ad(x, y)
-
-        x = self.upsample(x)
-
-        # 32x64
-        x = self.conv41(x)
-        y = self.mlp41(w)
-        x = self.ad(x, y)
-
-        x = self.conv42(x)
-        y = self.mlp42(w)
-        x = self.ad(x, y)
-
-        if self.n_layers == 5:
+        for conv, mlp in zip(self.convs, self.mlps):
+            y = mlp(w)
+            x = conv(x)
+            x = self.ad(x, y)
             x = self.upsample(x)
-
-            # 64x128
-            x = self.conv51(x)
-            y = self.mlp51(w)
-            x = self.ad(x, y)
-
-            x = self.conv52(x)
-            y = self.mlp52(w)
-            x = self.ad(x, y)
 
         x = self.final(x)
         return x

@@ -42,6 +42,7 @@ class LinearLayer(nn.Module):
                  act="leakyrelu",
                  n_blocks=1,
                  bn_mode="old",
+                 skip_bn_first_layer=True,
                  use_spectral_norm=False):
         super().__init__()
 
@@ -53,7 +54,7 @@ class LinearLayer(nn.Module):
             self.linear_blocks.append(
                 spectral_norm(l) if use_spectral_norm else l)
 
-            if use_bn and i != 0:
+            if not (i == 0 and skip_bn_first_layer) and use_bn:
                 if bn_mode == "old":
                     self.linear_blocks.append(nn.BatchNorm1d(out_f, eps=0.8))
                 elif bn_mode == "momentum":
@@ -239,6 +240,9 @@ class ConvBlock(nn.Module):
                 self.conv_block.append(nn.Conv2d(in_f if i == 0 else out_f, out_f, kernel_size,
                                                  stride=stride, padding_mode=padding_mode, padding=padding, bias=not use_bn))
 
+            if inject_noise:
+                self.conv_block.append(NoiseLayer(out_f))
+
             if use_instance_norm:
                 self.conv_block.append(nn.InstanceNorm2d(out_f))
             elif use_bn:
@@ -267,8 +271,8 @@ class ConvBlock(nn.Module):
             if dropout:
                 self.conv_block.append(nn.Dropout2d(0.25))
 
-            if inject_noise:
-                self.conv_block.append(NoiseLayer(out_f))
+            # if inject_noise:
+            #     self.conv_block.append(NoiseLayer(out_f))
 
     def forward(self, x):
         for layer in self.conv_block:

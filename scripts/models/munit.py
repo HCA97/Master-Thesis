@@ -213,6 +213,8 @@ class MUNIT(pl.LightningModule):
 
             # Logging
             self.log("loss/adv_loss", self.hparams.l0 * gen_loss)
+            self.log("loss/fake_loss1", self.hparams.l0 * fake_loss1)
+            self.log("loss/fake_loss2", self.hparams.l0 * fake_loss2)
             self.log("loss/rec_loss",  self.hparams.l1 * loss_rec)
             self.log("loss/style_loss", self.hparams.l2 * loss_s)
             self.log("loss/content_loss", self.hparams.l3 * loss_c)

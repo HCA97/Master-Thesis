@@ -7,6 +7,8 @@ import torch as th
 import torchvision
 import lpips
 
+# from .models import *
+
 
 def compute_loss(predictions: Union[th.Tensor, List[th.Tensor]], label: int, criteria: th.nn.Module):
     """[summary]
@@ -126,7 +128,7 @@ def interpolate(p1: th.Tensor, p2: th.Tensor, ratio: float, use_slerp: bool) -> 
     return noise
 
 
-@th.no_grad()
+@ th.no_grad()
 def vgg16_get_activation_maps(imgs: th.Tensor,
                               layer_idx: int,
                               device: str,
@@ -174,7 +176,7 @@ def vgg16_get_activation_maps(imgs: th.Tensor,
     return x.detach().cpu().clone()
 
 
-@th.no_grad()
+@ th.no_grad()
 def perceptual_path_length(generator, n_samples=1024, epsilon=1e-4, use_slerp=True, device="cpu", truncation=1, batch_size=1024, net="vgg"):
     """[summary]
 
@@ -229,7 +231,8 @@ def perceptual_path_length(generator, n_samples=1024, epsilon=1e-4, use_slerp=Tr
                             device=device)
 
             ratio = np.random.uniform(0, 1)
-            z1[i, :] = interpolate(z1_, z2_, ratio=ratio, use_slerp=use_slerp)
+            z1[i, :] = interpolate(z1_, z2_, ratio=ratio,
+                                   use_slerp=use_slerp)
             z2[i, :] = interpolate(z1_, z2_, ratio=min(
                 ratio + epsilon, 1), use_slerp=use_slerp)
 
