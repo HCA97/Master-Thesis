@@ -43,6 +43,7 @@ if __name__ == "__main__":
     max_epochs = 1000
     fid_samples = 1024
     img_dim = (args.height, args.width)
+    device = "cuda:0"
 
     # data aug
     brightness = [1, 1.1]
@@ -98,16 +99,16 @@ if __name__ == "__main__":
     if not args.skip_train_fid:
         img_train2, img_val2 = next(iter(potsdam_cars_dataloader))
 
-        fid1 = fid_score(img_train1, img_train2, device="cuda:0")
+        fid1 = fid_score(img_train1, img_train2, device=device)
         if not args.skip_val:
-            fid2 = fid_score(img_val1, img_val2, device="cuda:0")
+            fid2 = fid_score(img_val1, img_val2, device=device)
             print(f"[DATASET] Train FID is {fid1} and Val FID is {fid2}.")
         else:
             print(f"[DATASET] Train FID is {fid1}")
     # save act so we don't need to compute every iteration
-    act_train = vgg16_get_activation_maps(img_train1, 33, "cuda:0", (-1, 1))
+    act_train = vgg16_get_activation_maps(img_train1, 33, device, (-1, 1))
     if not args.skip_val:
-        act_val = vgg16_get_activation_maps(img_val1, 33, "cuda:0", (-1, 1))
+        act_val = vgg16_get_activation_maps(img_val1, 33, device, (-1, 1))
 
     for version in tqdm.tqdm(os.listdir(args.experiment_dir), desc="Version"):
 
@@ -150,10 +151,11 @@ if __name__ == "__main__":
 
                 img_fake = next(iter(fake_cars_dataloader))[0]
                 act_fake = vgg16_get_activation_maps(
-                    img_fake, 33, "cuda:0", (-1, 1))
+                    img_fake, 33, device, (-1, 1))
 
                 # fid score
-                fid_train.append(fid_score(act_train, act_fake, skip_vgg=True))
+                fid_train.append(fid_score(act_train, act_fake,
+                                 skip_vgg=True, n_cases=fid_samples))
                 if not args.skip_val:
                     fid_val.append(fid_score(act_val, act_fake, skip_vgg=True))
                     print(
