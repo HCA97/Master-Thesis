@@ -117,10 +117,12 @@ if __name__ == "__main__":
 
                     # fake imgs need to do it in batches for memory stuff
                     fake_imgs = []
-                    for i in range(n_samples // bs + 1):
+                    for i in range((n_samples + bs) // bs):
                         si = i * bs
                         ei = min((i+1)*bs, n_samples)
-                        fake_imgs.append(model(gen_in[si:ei]))
+                        # print(gen_in[si:ei].shape)
+                        fake_imgs.append(
+                            model(gen_in[si:ei]).detach().cpu().clone())
                     fake_imgs = th.cat(fake_imgs, dim=0)
 
                     # save them
