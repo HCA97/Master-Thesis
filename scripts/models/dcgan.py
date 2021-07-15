@@ -16,8 +16,7 @@ from .networks import *
 
 
 class GAN(pl.LightningModule):
-    """My Gan module because I find ``pl_bolts`` implementation confusing.
-    It is based on https://lightning-bolts.readthedocs.io/en/latest/gans.html#basic-gan
+    """
 
     Parameters
     ----------
@@ -39,7 +38,6 @@ class GAN(pl.LightningModule):
                  disc_model="basic",
                  gen_init="normal",
                  disc_init="normal",
-                 kappa=1,
                  # GAN Loss
                  use_symmetry_loss=False,
                  gamma=1,
@@ -47,27 +45,16 @@ class GAN(pl.LightningModule):
                  rec_loss="l1",
                  beta=1.0,
                  # Training Strategies
-                 use_gp=False,
-                 alpha=1.0,
-                 one_sided_label_smoothing=False,
-                 moving_average=False,
                  use_buffer=False,
-                 buffer_method="random",
-                 buffer_size=1000):
+                 buffer_size=1000,
+                 **kwargs):
+
         super().__init__()
         self.save_hyperparameters()
 
         self.generator = self.get_generator(generator_params)
         self.discriminator = self.get_discriminator(discriminator_params)
         self.criterion = self.get_criterion()
-
-        if moving_average:
-            self.generator_avg = self.get_generator(generator_params)
-            self.generator_avg.load_state_dict(
-                copy.deepcopy(self.generator.state_dict()))
-
-        # if rec_loss == "lpips":
-        #     self.lpips = lpips.LPIPS(net='vgg')
 
         if use_buffer:
             if buffer_size % 100 != 0:
@@ -82,9 +69,6 @@ class GAN(pl.LightningModule):
         self.gen_input = []
         self.imgs_real = None
 
-        # LR Scheduler
-        # self.scheduler_disc, self.scheduler_gen = None, None
-
     def lr_schedulers(self):
         # over-write this shit
         return [self.scheduler_disc, self.scheduler_gen]
@@ -95,10 +79,7 @@ class GAN(pl.LightningModule):
     def get_generator(self, generator_params):
         generator_params = generator_params if generator_params else {}
 
-        if self.hparams.gen_model == "resnet":
-            generator = ResNetGenerator(
-                self.hparams.img_dim, **generator_params)
-        elif self.hparams.gen_model == "basic":
+        if self.hparams.gen_model == "basic":
             generator = BasicGenerator(
                 self.hparams.img_dim, **generator_params)
         elif self.hparams.gen_model == "unet":
@@ -107,15 +88,11 @@ class GAN(pl.LightningModule):
         elif self.hparams.gen_model == "refiner":
             generator = RefinerNet(
                 n_channels=self.hparams.img_dim[0], **generator_params)
-        elif self.hparams.gen_model == "stylegan":
-            generator = StyleGan(self.hparams.img_dim, **generator_params)
         else:
             raise NotImplementedError()
 
         if self.hparams.gen_init == "normal":
             generator.apply(weights_init_normal)
-        if self.hparams.gen_init == "stylegan":
-            generator.apply(weights_init_stylegan)
         return generator
 
     def get_discriminator(self, discriminator_params):
@@ -126,6 +103,9 @@ class GAN(pl.LightningModule):
                 self.hparams.img_dim, **discriminator_params)
         elif self.hparams.disc_model == "patch":
             discriminator = PatchDiscriminator(
+                self.hparams.img_dim, **discriminator_params)
+        elif self.hparams.disc_model == "basicpatch":
+            discriminator = BasicPatchDiscriminator(
                 self.hparams.img_dim, **discriminator_params)
         else:
             raise NotImplementedError()
@@ -155,27 +135,20 @@ class GAN(pl.LightningModule):
             opt_gen, 'min', patience=patience, factor=0.5, verbose=True)
         return [opt_disc, opt_gen], []
 
-    def forward(self, tensor: th.Tensor) -> th.Tensor:
-        if self.hparams.moving_average:
-            return self.generator_avg(tensor)
+    def forward(self, tensor: th.Tensor, **kwargs) -> th.Tensor:
         return self.generator(tensor)
 
     def training_step(self, batch, batch_idx, optimizer_idx):
         real, fake = batch
 
-        # moving average
-        if self.hparams.moving_average and optimizer_idx == 1:
-            for p, avg_p in zip(self.generator.parameters(), self.generator_avg.parameters()):
-                avg_p.data.copy_(0.999*avg_p.data + 0.001*p.data)
-
-        # append real image activation for FID
+        # append real image activation for FID computation
         if len(self.act_real) < self.n_samples:
             act = np.squeeze(vgg16_get_activation_maps(
                 real, layer_idx=33, device="cpu", normalize_range=(-1, 1)).numpy())
             self.act_real = np.concatenate(
                 (self.act_real, act), axis=0) if len(self.act_real) > 0 else act
 
-        # append fake images or noise vectors for FID
+        # append fake images or noise vectors for FID computation
         if len(self.gen_input) < self.n_samples:
             if self.hparams.gen_model in ["unet", "refiner"]:
                 self.gen_input = th.cat((self.gen_input, fake), dim=0) if len(
@@ -184,7 +157,7 @@ class GAN(pl.LightningModule):
                 self.gen_input = th.normal(
                     0, 1, (self.n_samples, self.generator.latent_dim), device=self.device)
 
-        # store the first batch for callback
+        # store the first batch for Pix2Pix callback
         if self.imgs_real is None:
             self.imgs_real = real
 
@@ -192,33 +165,10 @@ class GAN(pl.LightningModule):
 
         # Train discriminator
         if optimizer_idx == 0:
-            if self.hparams.use_gp:
-                real = real.requires_grad_(True)
-
-            # Train with real
-            if self.hparams.disc_model == "basic" and self.discriminator.heat_map:
-                real_pred, real_patch = self.discriminator(real)
-            else:
-                real_pred = self.discriminator(real)
 
             # Loss
-            real_gt = th.ones_like(real_pred)
-            # Noisy Labels
-            if self.hparams.one_sided_label_smoothing:
-                real_gt = th.rand(0.8, 1) * real_gt
-            real_loss = self.criterion(real_pred, real_gt)
-            if self.hparams.disc_model == "basic" and self.discriminator.heat_map:
-                real_patch_gt = th.ones_like(real_patch)
-                real_loss += self.hparams.kappa * \
-                    self.criterion(real_patch, real_patch_gt)
-
-            # Gradient Penalty (R1)
-            gp_loss = 0
-            if self.hparams.use_gp:
-                grad = th.autograd.grad(real_pred, real, grad_outputs=th.ones(real_pred.size()).to(self.device),
-                                        create_graph=True, retain_graph=True, only_inputs=True)[0]
-                slopes = th.sqrt(th.sum(th.mul(grad, grad), dim=[1, 2, 3]))
-                gp_loss = 0.5 * self.hparams.alpha * th.mean(slopes)
+            real_pred = self.discriminator(real)
+            real_loss = compute_loss(real_pred, 1, self.criterion)
 
             # Train with fake
             if self.hparams.gen_model in ["unet", "refiner"]:
@@ -244,10 +194,9 @@ class GAN(pl.LightningModule):
                     for i in range(pick):
                         fake_[i] = self.buffer[idx[i]].to(self.device)
 
-            if self.hparams.disc_model == "basic" and self.discriminator.heat_map:
-                fake_pred, fake_patch = self.discriminator(fake_)
-            else:
-                fake_pred = self.discriminator(fake_)
+            # Loss
+            fake_pred = self.discriminator(fake_)
+            fake_loss = compute_loss(fake_pred, 0, self.criterion)
 
             if self.hparams.use_buffer:
                 # remember up to 100 iterations
@@ -261,39 +210,18 @@ class GAN(pl.LightningModule):
                 si = cases * (self.global_step % 100)
                 ei = min(si + cases, len(self.buffer))  # incase it overshoots
 
-                # copy predictions, i don't know this much copying is needed
-                fake_pred_copy = fake_pred.detach().cpu().clone()
-                fake_pred_copy = fake_pred_copy.mean(axis=1) if len(
-                    fake_pred_copy.shape) == 2 else fake_pred_copy.mean(axis=(1, 2, 3))
-                idx = th.argsort(fake_pred_copy)  # ascending order
-
                 # store the buffer
                 pick = ei - si  # incase it overshoots
                 if pick > 0:
-                    if self.hparams.buffer_method == "best":
-                        self.buffer[si:ei] = fake_copy[idx[-pick:]]
-                    elif self.hparams.buffer_method == "worst":
-                        self.buffer[si:ei] = fake_copy[idx[:pick]]
-                    else:
-                        self.buffer[si:ei] = fake_copy[:pick]
-
-            # Loss
-            fake_gt = th.zeros_like(fake_pred)
-            fake_loss = self.criterion(fake_pred, fake_gt)
-            if self.hparams.disc_model == "basic" and self.discriminator.heat_map:
-                fake_patch_gt = th.zeros_like(fake_patch)
-                fake_loss += self.hparams.kappa * \
-                    self.criterion(fake_patch, fake_patch_gt)
+                    self.buffer[si:ei] = fake_copy[:pick]
 
             # Total Loss
-            result = real_loss + fake_loss + gp_loss
+            result = real_loss + fake_loss
 
             # Logging
             self.log("loss/disc", result)
             self.log("loss/disc_real", real_loss)
             self.log("loss/disc_fake", fake_loss)
-            if self.hparams.use_gp:
-                self.log("loss/disc_gp", gp_loss)
 
         # Train generator
         if optimizer_idx == 1:
@@ -308,11 +236,6 @@ class GAN(pl.LightningModule):
                     l1_loss = self.hparams.beta * \
                         th.sum(th.abs(fake.mean(axis=(1)) -
                                fake_.mean(axis=(1))))
-                # else:
-                #     # this might use a lot of vram
-                #     self.lpips.to(self.device)
-                #     l1_loss = self.hparams.beta * \
-                #         th.sum(self.lpips(fake, fake_, normalize=True))
             else:
                 z = th.normal(0, 1, size=(
                     len(real), self.generator.latent_dim), device=self.device)
@@ -331,17 +254,8 @@ class GAN(pl.LightningModule):
                     th.mean(th.abs(fake_1 - fake_2))
 
             # Gen Loss
-            if self.hparams.disc_model == "basic" and self.discriminator.heat_map:
-                fake_pred, fake_patch = self.discriminator(fake_)
-            else:
-                fake_pred = self.discriminator(fake_)
-            fake_gt = th.ones_like(fake_pred)
-
-            gen_loss = self.criterion(fake_pred, fake_gt)
-            if self.hparams.disc_model == "basic" and self.discriminator.heat_map:
-                fake_patch_gt = th.ones_like(fake_patch)
-                gen_loss += self.hparams.kappa * \
-                    self.criterion(fake_patch, fake_patch_gt)
+            fake_pred = self.discriminator(fake_)
+            gen_loss = compute_loss(fake_pred, 1, self.criterion)
 
             # Total Loss
             result = gen_loss + l1_loss + symmetry_loss
@@ -357,52 +271,42 @@ class GAN(pl.LightningModule):
 
     def on_epoch_end(self):
 
-        if (self.current_epoch + 1) % self.hparams.fid_interval == 0 or self.current_epoch == 0:
+        if (self.current_epoch + 1) % self.hparams.fid_interval == 0 or self.current_epoch == 0 and len(self.gen_input) >= self.n_samples:
 
-            if self.hparams.moving_average:
-                self.generator_avg.eval()
-            else:
-                self.generator.eval()
+            self.generator.eval()
 
-            if len(self.gen_input) >= self.n_samples:
-                with th.no_grad():
-                    act_fake = np.zeros_like(self.act_real)
+            with th.no_grad():
+                act_fake = np.zeros_like(self.act_real)
 
-                    for i in range(self.n_samples // self.act_samples):
-                        # start and end index
-                        si = i * self.act_samples
-                        ei = min((i+1)*self.act_samples, self.n_samples)
+                for i in range(self.n_samples // self.act_samples):
+                    # start and end index
+                    si = i * self.act_samples
+                    ei = min((i+1)*self.act_samples, self.n_samples)
 
-                        # images generated by generator
-                        if self.hparams.moving_average:
-                            imgs = self.generator_avg(self.gen_input[si:ei])
-                        else:
-                            imgs = self.generator(self.gen_input[si:ei])
+                    # images generated by generator
+                    imgs = self.generator(self.gen_input[si:ei])
 
-                        # vgg activations
-                        act = np.squeeze(vgg16_get_activation_maps(
-                            imgs, layer_idx=33, device="cpu", normalize_range=(-1, 1)).numpy())
-                        act_fake[si:ei] = act
+                    # vgg activations
+                    act = np.squeeze(vgg16_get_activation_maps(
+                        imgs, layer_idx=33, device="cpu", normalize_range=(-1, 1)).numpy())
+                    act_fake[si:ei] = act
 
-                if self.hparams.moving_average:
-                    self.generator_avg.train()
-                else:
-                    self.generator.train()
+            self.generator.train()
 
-                # compute fid
-                fid = fid_score(self.act_real, act_fake, skip_vgg=True)
+            # compute fid
+            fid = fid_score(self.act_real, act_fake, skip_vgg=True)
 
-                # log fid
-                self.log("fid", fid)
+            # log fid
+            self.log("fid", fid)
 
-                # lr scheduler
-                # is this correct place to update?
-                if self.hparams.use_lr_scheduler:
-                    sch1, sch2 = self.lr_schedulers()
-                    sch1.step(fid)
-                    sch2.step(fid)
+            # lr scheduler
+            # is this correct place to update?
+            if self.hparams.use_lr_scheduler:
+                sch1, sch2 = self.lr_schedulers()
+                sch1.step(fid)
+                sch2.step(fid)
 
-            # log lr
-            opt1, opt2 = self.optimizers(use_pl_optimizer=True)
-            self.log("lr/disc", opt1.param_groups[0]["lr"])
-            self.log("lr/gen", opt2.param_groups[0]["lr"])
+        # log lr
+        opt1, opt2 = self.optimizers(use_pl_optimizer=True)
+        self.log("lr/disc", opt1.param_groups[0]["lr"])
+        self.log("lr/gen", opt2.param_groups[0]["lr"])
