@@ -27,9 +27,9 @@ class ImageFolder(Dataset):
         frame = []
         img_names = os.listdir(root)
         random.shuffle(img_names)
-        for i in range(len(img_names)):
-            image_path = os.path.join(root, img_names[i])
-            if image_path[-4:] == '.jpg' or image_path[-4:] == '.png' or image_path[-5:] == '.jpeg':
+        for img_name in img_names:
+            image_path = os.path.join(root, img_name)
+            if os.path.splitext(image_path)[-1] in ['.jpg', '.png', '.jpeg']:
                 frame.append(image_path)
         return frame
 
@@ -65,10 +65,12 @@ class PostdamCarsDataModule(LightningModule):
         self.batch_size = batch_size
         self.img_size = img_size
         self.dataset = None
-        self.transform1 = transforms.Compose([transforms.Resize(self.img_size), transforms.ToTensor(),
-                                             transforms.Normalize([0.5], [0.5])])
-        self.transform2 = transforms.Compose([transforms.Resize(self.img_size), transforms.ToTensor(),
-                                             transforms.Normalize([0.5], [0.5])])
+        self.transform1 = transforms.Compose([transforms.Resize(self.img_size),
+                                              transforms.ToTensor(),
+                                              transforms.Normalize([0.5], [0.5])])
+        self.transform2 = transforms.Compose([transforms.Resize(self.img_size),
+                                              transforms.ToTensor(),
+                                              transforms.Normalize([0.5], [0.5])])
         if transform:
             self.transform1 = transform
         if transform2:

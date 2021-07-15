@@ -178,10 +178,6 @@ class LatentDimInterpolator(Callback):
                  num_samples: int = 5, steps: int = 10, normalize: bool = True, use_slerp: bool = True):
         super().__init__()
 
-        if not _TORCHVISION_AVAILABLE:  # pragma: no cover
-            raise ModuleNotFoundError(
-                "You want to use `torchvision` which is not installed yet.")
-
         self.interpolate_epoch_interval = interpolate_epoch_interval
         self.num_samples = num_samples
         self.normalize = normalize
@@ -260,13 +256,9 @@ class TensorboardGeneratorSampler(Callback):
     def __init__(
         self,
         epoch_interval: int = 5,
-        num_samples: int = 18,
+        num_samples: int = 64,
         nrow: int = 8,
-        padding: int = 2,
-        normalize: bool = False,
-        norm_range: Optional[Tuple[int, int]] = None,
-        scale_each: bool = False,
-        pad_value: int = 0,
+        normalize: bool = True
     ) -> None:
         """
         Args:
@@ -283,20 +275,17 @@ class TensorboardGeneratorSampler(Callback):
                 images separately rather than the (min, max) over all images. Default: ``False``.
             pad_value: Value for the padded pixels. Default: ``0``.
         """
-        if not _TORCHVISION_AVAILABLE:  # pragma: no cover
-            raise ModuleNotFoundError(
-                "You want to use `torchvision` which is not installed yet.")
-
         super().__init__()
+
         self.num_samples = num_samples
         self.nrow = nrow
         self.epoch_interval = epoch_interval
-        self.padding = padding
         self.normalize = normalize
-        self.norm_range = norm_range
-        self.scale_each = scale_each
-        self.pad_value = pad_value
         self.z = None
+
+        if self.num_samples % self.nrow != 0:
+            raise AttributeError(
+                f"Number of samples ({self.num_samples}) must be divisible by number of rows ({self.nrow})")
 
     def on_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
 
@@ -305,8 +294,8 @@ class TensorboardGeneratorSampler(Callback):
         elif pl_module.hparams.gen_model in ["unet", "refiner"]:
             return
         elif (trainer.current_epoch + 1) % self.epoch_interval == 0 or trainer.current_epoch == 0:
-            dim = (self.num_samples, pl_module.generator.latent_dim, 1, 1)
             if self.z is None:
+                dim = (self.num_samples, pl_module.generator.latent_dim, 1, 1)
                 self.z = th.normal(mean=0.0, std=1.0, size=dim,
                                    device=pl_module.device)
 
@@ -317,14 +306,8 @@ class TensorboardGeneratorSampler(Callback):
                 pl_module.train()
 
             grid = torchvision.utils.make_grid(
-                tensor=images,
-                nrow=self.nrow,
-                padding=self.padding,
-                normalize=self.normalize,
-                range=self.norm_range,
-                scale_each=self.scale_each,
-                pad_value=self.pad_value,
-            )
+                images, nrow=self.nrow, normalize=self.normalize)
+
             str_title = f"{pl_module.__class__.__name__}_images"
             trainer.logger.experiment.add_image(
                 str_title, grid, global_step=trainer.current_epoch)

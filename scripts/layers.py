@@ -3,37 +3,6 @@ import torch as th
 from torch.nn.utils import spectral_norm
 
 
-class LRN(nn.Module):
-    """https://github.com/jiecaoyu/pytorch_imagenet/blob/984a2a988ba17b37e1173dd2518fa0f4dc4a1879/networks/model_list/alexnet.py#L9"""
-
-    def __init__(self, local_size=1, alpha=1.0, beta=0.75, k=1.0, ACROSS_CHANNELS=False):
-        super(LRN, self).__init__()
-        self.ACROSS_CHANNELS = ACROSS_CHANNELS
-        if self.ACROSS_CHANNELS:
-            self.average = nn.AvgPool3d(kernel_size=(local_size, 1, 1),
-                                        stride=1,
-                                        padding=(int((local_size-1.0)/2), 0, 0))
-        else:
-            self.average = nn.AvgPool2d(kernel_size=local_size,
-                                        stride=1,
-                                        padding=int((local_size-1.0)/2))
-        self.alpha = alpha
-        self.beta = beta
-        self.k = k
-
-    def forward(self, x):
-        if self.ACROSS_CHANNELS:
-            div = x.pow(2).unsqueeze(1)
-            div = self.average(div).squeeze(1)
-            div = div.mul(self.alpha).add(self.k).pow(self.beta)
-        else:
-            div = x.pow(2)
-            div = self.average(div)
-            div = div.mul(self.alpha).add(self.k).pow(self.beta)
-        x = x.div(div)
-        return x
-
-
 class LinearLayer(nn.Module):
     def __init__(self,
                  in_f,
@@ -94,19 +63,8 @@ class NoiseLayer(nn.Module):
         super().__init__()
         self.weight = nn.Parameter(th.zeros(channels))
         self.noise = None
-        # self.deterministic = deterministic
 
     def forward(self, x, noise=None):
-        # if self.deterministic and self.noise is None:
-        #     self.noise = th.randn(x.size(0), 1, x.size(
-        #         2), x.size(3), device=x.device, dtype=x.dtype)
-
-        # if self.deterministic:
-        #     noise = self.noise
-        # else:
-        #     noise = th.randn(x.size(0), 1, x.size(
-        #         2), x.size(3), device=x.device, dtype=x.dtype)
-
         if noise is None and self.noise is None:
             noise = th.randn(x.size(0), 1, x.size(
                 2), x.size(3), device=x.device, dtype=x.dtype)
@@ -129,9 +87,6 @@ class AdaIN(nn.Module):
         x_sigma = th.std(x, dim=(2, 3)).view(x.shape[0], x.shape[1], 1, 1)
         gamma = y[:, :x.shape[1]].view(x.shape[0], x.shape[1], 1, 1)
         beta = y[:, x.shape[1]:].view(x.shape[0], x.shape[1], 1, 1)
-
-        # print(x_sigma.shape, x_mu.shape, gamma.shape, beta.shape, x.shape)
-
         return gamma * (x - x_mu) / (x_sigma + 1e-8) + beta
 
 
@@ -221,7 +176,8 @@ class ConvBlock(nn.Module):
                  n_blocks=1,
                  inject_noise=False,
                  bn_mode="old",
-                 use_spectral_norm=False):
+                 use_spectral_norm=False,
+                 **kwargs):
         """ConvBlocks Constructor"""
         super(ConvBlock, self).__init__()
 
@@ -256,7 +212,6 @@ class ConvBlock(nn.Module):
 
             if act == "leakyrelu":
                 self.conv_block.append(nn.LeakyReLU(0.2, inplace=True))
-                # self.conv_block.append(nn.LeakyReLU(inplace=True))
             elif act == "relu":
                 self.conv_block.append(nn.ReLU(inplace=True))
             elif act == "tanh":
@@ -270,9 +225,6 @@ class ConvBlock(nn.Module):
 
             if dropout:
                 self.conv_block.append(nn.Dropout2d(0.25))
-
-            # if inject_noise:
-            #     self.conv_block.append(NoiseLayer(out_f))
 
     def forward(self, x):
         for layer in self.conv_block:
