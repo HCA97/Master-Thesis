@@ -23,7 +23,7 @@ max_epochs = 1000
 interval = 25
 
 data_dir = "/scratch/s7hialtu/potsdam_cars_all"
-results_dir = "/scratch/s7hialtu/dcgan_disc_double_params_padding_reflect_lr_scheduler_slightly_larger"
+results_dir = "/scratch/s7hialtu/dcgan_disc_double_params_padding_reflect_lr_scheduler_double_lr_slightly_larger"
 
 if not os.path.isdir(data_dir):
     data_dir = "../potsdam_data/potsdam_cars_all"
