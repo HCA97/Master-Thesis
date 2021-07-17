@@ -91,42 +91,97 @@ class AdaIN(nn.Module):
 
 
 class ResBlock(nn.Module):
-    def __init__(self, in_f, out_f, act="leakyrelu", inject_noise=False, use_instance_norm=False, bn_mode="old", padding_mode="zeros", use_spectral_norm=False):
+    def __init__(self,
+                 in_f,
+                 out_f,
+                 act="leakyrelu",
+                 inject_noise=False,
+                 use_instance_norm=False,
+                 bn_mode="old",
+                 padding_mode="zeros",
+                 use_spectral_norm=False,
+                 use_dropout=False,
+                 **kwargs):
         super().__init__()
         self.projection = None
         if in_f != out_f:
             self.projection = ConvBlock(in_f, out_f,
                                         act=act,
-                                        inject_noise=inject_noise,
                                         use_instance_norm=use_instance_norm,
                                         use_bn=not use_instance_norm,
                                         bn_mode=bn_mode,
+                                        padding=0,
+                                        kernel_size=1,
                                         padding_mode=padding_mode,
+                                        dropout=use_dropout,
                                         use_spectral_norm=use_spectral_norm)
+
+        filters = min(in_f, out_f)
         self.conv_block = nn.Sequential(
-            ConvBlock(out_f, out_f,
+            ConvBlock(filters, filters,
                       act=act,
                       use_instance_norm=use_instance_norm,
                       use_bn=not use_instance_norm,
                       inject_noise=inject_noise,
                       padding_mode=padding_mode,
+                      dropout=use_dropout,
                       bn_mode=bn_mode),
-            ConvBlock(out_f, out_f,
+            ConvBlock(filters, out_f,
                       act="linear",
                       bn_mode=bn_mode,
                       use_instance_norm=use_instance_norm,
                       use_bn=not use_instance_norm,
                       padding_mode=padding_mode,
+                      dropout=use_dropout,
                       use_spectral_norm=use_spectral_norm)
         )
         self.act = nn.LeakyReLU(
             0.2, inplace=True) if act == "leakyrelu" else nn.ReLU(inplace=True)
 
     def forward(self, x):
+        skip_x = x
         if self.projection is not None:
-            x = self.projection(x)
-        x = self.act(x + self.conv_block(x))
+            skip_x = self.projection(x)
+        x = self.act(skip_x + self.conv_block(x))
         return x
+
+# class ResBlock(nn.Module):
+#     def __init__(self, in_f, out_f, act="leakyrelu", inject_noise=False, use_instance_norm=False, bn_mode="old", padding_mode="zeros", use_spectral_norm=False):
+#         super().__init__()
+#         self.projection = None
+#         if in_f != out_f:
+#             self.projection = ConvBlock(in_f, out_f,
+#                                         act=act,
+#                                         inject_noise=inject_noise,
+#                                         use_instance_norm=use_instance_norm,
+#                                         use_bn=not use_instance_norm,
+#                                         bn_mode=bn_mode,
+#                                         padding_mode=padding_mode,
+#                                         use_spectral_norm=use_spectral_norm)
+#         self.conv_block = nn.Sequential(
+#             ConvBlock(out_f, out_f,
+#                       act=act,
+#                       use_instance_norm=use_instance_norm,
+#                       use_bn=not use_instance_norm,
+#                       inject_noise=inject_noise,
+#                       padding_mode=padding_mode,
+#                       bn_mode=bn_mode),
+#             ConvBlock(out_f, out_f,
+#                       act="linear",
+#                       bn_mode=bn_mode,
+#                       use_instance_norm=use_instance_norm,
+#                       use_bn=not use_instance_norm,
+#                       padding_mode=padding_mode,
+#                       use_spectral_norm=use_spectral_norm)
+#         )
+#         self.act = nn.LeakyReLU(
+#             0.2, inplace=True) if act == "leakyrelu" else nn.ReLU(inplace=True)
+
+#     def forward(self, x):
+#         if self.projection is not None:
+#             x = self.projection(x)
+#         x = self.act(x + self.conv_block(x))
+#         return x
 
 
 class ConvBlock(nn.Module):

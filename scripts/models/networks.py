@@ -231,6 +231,70 @@ class PatchDiscriminator(nn.Module):
         return x
 
 
+class ResnetDiscriminator(nn.Module):
+    def __init__(self,
+                 img_size=(3, 32, 64),
+                 base_channels=64,
+                 n_layers=4,
+                 use_spectral_norm=False,
+                 use_instance_norm=False,
+                 use_dropout=True,
+                 n_blocks=1,
+                 padding_mode="reflect",
+                 bn_mode="default",
+                 use_sigmoid=True,
+                 **kwargs):
+        super().__init__()
+
+        self.n_layers = n_layers
+
+        input_channels, input_height, input_width = img_size
+
+        layers = [ConvBlock(input_channels,
+                            base_channels,
+                            use_dropout=use_dropout,
+                            use_instance_norm=False,
+                            use_bn=False,
+                            padding_mode=padding_mode,
+                            bn_mode=bn_mode)]
+        for i in range(n_layers):
+            layers.append(ResBlock(base_channels*2**(i-1 if i > 0 else i),
+                                   base_channels*2**i,
+                                   dropout=use_dropout,
+                                   use_instance_norm=use_instance_norm,
+                                   use_bn=not use_instance_norm,
+                                   bn_mode=bn_mode,
+                                   padding_mode=padding_mode,
+                                   use_spectral_norm=use_spectral_norm))
+            for _ in range(1, n_blocks):
+                layers.append(ResBlock(base_channels*2**i,
+                                       base_channels*2**i,
+                                       dropout=use_dropout,
+                                       use_instance_norm=use_instance_norm,
+                                       use_bn=not use_instance_norm,
+                                       bn_mode=bn_mode,
+                                       padding_mode=padding_mode,
+                                       use_spectral_norm=use_spectral_norm))
+            layers.append(nn.AvgPool2d(2, 2))
+
+        self.conv_blocks = nn.Sequential(*layers)
+
+        output_width, output_height = input_width, input_height
+        for i in range(n_layers):
+            output_width = math.ceil(output_width / 2)
+            output_height = math.ceil(output_height / 2)
+        ds_size = output_width * output_height
+        self.l1 = nn.Sequential(
+            nn.Linear(base_channels*2**(n_layers-1) * ds_size, 1),
+            nn.Sigmoid() if use_sigmoid else nn.Identity())
+
+    def forward(self, x):
+        x = self.conv_blocks(x)
+        x = x.view(x.shape[0], -1)
+        x = self.l1(x)
+        return x
+
+
 class BasicDiscriminator(nn.Module):
     """Simple CNN no fancy layers. It is similar to the
     https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/dcgan/dcgan.py
@@ -671,6 +735,90 @@ class UnetGenerator(nn.Module):
         if self.reconstruct:
             return x
         return x_in + x
+
+
+class ResNetGenerator(nn.Module):
+    def __init__(self,
+                 img_size=(3, 32, 64),
+                 latent_dim=100,
+                 init_channels=512,
+                 n_layers=4,
+                 act="leakyrelu",
+                 n_blocks=1,
+                 bn_mode="default",
+                 inject_noise=False,
+                 use_spectral_norm=False,
+                 padding_mode="reflect",
+                 **kwargs):
+        super().__init__()
+
+        input_channels, input_height, input_width = img_size
+
+        scale_factor = 2**n_layers
+        if input_height % scale_factor != 0 or input_width % scale_factor != 0:
+            raise AttributeError(
+                f"Input size ({input_width}, {input_height}) must be divisible by scale factor {scale_factor}.")
+
+        self.init_height = input_height // scale_factor
+        self.init_width = input_width // scale_factor
+        self.latent_dim = latent_dim
+        self.init_channels = init_channels
+
+        self.l1 = nn.Linear(self.latent_dim, self.init_channels *
+                            self.init_width * self.init_height)
+
+        # first layer
+        layers = [nn.BatchNorm2d(self.init_channels),
+                  nn.Upsample(scale_factor=2)]
+
+        for n in range(n_blocks):
+            layers.append(ResBlock(self.init_channels,
+                                   self.init_channels,
+                                   padding_mode=padding_mode,
+                                   act=act,
+                                   bn_mode=bn_mode,
+                                   inject_noise=inject_noise,
+                                   use_spectral_norm=use_spectral_norm))
+
+        # middle layer
+        for i in range(1, n_layers):
+            layers.append(nn.Upsample(scale_factor=2))
+
+            layers.append(ResBlock(self.init_channels // 2 ** (i-1),
+                                   self.init_channels // 2 ** i,
+                                   padding_mode=padding_mode,
+                                   act=act,
+                                   inject_noise=inject_noise,
+                                   bn_mode=bn_mode,
+                                   use_spectral_norm=use_spectral_norm))
+
+            for n in range(1, n_blocks):
+                layers.append(ResBlock(self.init_channels // 2 ** i,
+                                       self.init_channels // 2 ** i,
+                                       inject_noise=inject_noise,
+                                       act=act,
+                                       bn_mode=bn_mode,
+                                       padding_mode=padding_mode,
+                                       use_spectral_norm=use_spectral_norm))
+
+        # last layer
+        layers.append(ConvBlock(self.init_channels // 2**(n_layers - 1),
+                                input_channels,
+                                use_bn=False,
+                                use_spectral_norm=False,
+                                padding_mode=padding_mode,
+                                act="tanh",
+                                bn_mode=bn_mode))
+
+        self.conv_blocks = nn.Sequential(*layers)
+
+    def forward(self, z):
+        x = z.view(z.shape[0], self.latent_dim)
+        x = self.l1(x)
+        x = x.view(x.shape[0], self.init_channels,
+                   self.init_height, self.init_width)
+        x = self.conv_blocks(x)
+        return x
 
 
 class BasicGenerator(nn.Module):
