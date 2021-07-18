@@ -100,7 +100,7 @@ class ResBlock(nn.Module):
                  bn_mode="old",
                  padding_mode="zeros",
                  use_spectral_norm=False,
-                 use_dropout=False,
+                 dropout=False,
                  **kwargs):
         super().__init__()
         self.projection = None
@@ -110,29 +110,28 @@ class ResBlock(nn.Module):
                                         use_instance_norm=use_instance_norm,
                                         use_bn=not use_instance_norm,
                                         bn_mode=bn_mode,
-                                        padding=0,
-                                        kernel_size=1,
+                                        padding=1,
+                                        kernel_size=3,
                                         padding_mode=padding_mode,
-                                        dropout=use_dropout,
+                                        dropout=dropout,
                                         use_spectral_norm=use_spectral_norm)
 
-        filters = min(in_f, out_f)
         self.conv_block = nn.Sequential(
-            ConvBlock(filters, filters,
+            ConvBlock(in_f, out_f,
                       act=act,
                       use_instance_norm=use_instance_norm,
                       use_bn=not use_instance_norm,
                       inject_noise=inject_noise,
                       padding_mode=padding_mode,
-                      dropout=use_dropout,
+                      dropout=dropout,
                       bn_mode=bn_mode),
-            ConvBlock(filters, out_f,
+            ConvBlock(out_f, out_f,
                       act="linear",
                       bn_mode=bn_mode,
                       use_instance_norm=use_instance_norm,
                       use_bn=not use_instance_norm,
                       padding_mode=padding_mode,
-                      dropout=use_dropout,
+                      dropout=dropout,
                       use_spectral_norm=use_spectral_norm)
         )
         self.act = nn.LeakyReLU(

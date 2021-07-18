@@ -231,7 +231,7 @@ class PatchDiscriminator(nn.Module):
         return x
 
 
-class ResnetDiscriminator(nn.Module):
+class ResNetDiscriminator(nn.Module):
     def __init__(self,
                  img_size=(3, 32, 64),
                  base_channels=64,
@@ -252,7 +252,7 @@ class ResnetDiscriminator(nn.Module):
 
         layers = [ConvBlock(input_channels,
                             base_channels,
-                            use_dropout=use_dropout,
+                            dropout=use_dropout,
                             use_instance_norm=False,
                             use_bn=False,
                             padding_mode=padding_mode,

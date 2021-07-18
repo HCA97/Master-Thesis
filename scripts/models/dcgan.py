@@ -82,6 +82,9 @@ class GAN(pl.LightningModule):
         if self.hparams.gen_model == "basic":
             generator = BasicGenerator(
                 self.hparams.img_dim, **generator_params)
+        elif self.hparams.gen_model == "resnet":
+            generator = ResNetGenerator(
+                self.hparams.img_dim, **generator_params)
         elif self.hparams.gen_model == "unet":
             generator = UnetGenerator(
                 n_channels=self.hparams.img_dim[0], **generator_params)
@@ -106,6 +109,9 @@ class GAN(pl.LightningModule):
                 self.hparams.img_dim, **discriminator_params)
         elif self.hparams.disc_model == "basicpatch":
             discriminator = BasicPatchDiscriminator(
+                self.hparams.img_dim, **discriminator_params)
+        elif self.hparams.disc_model == "resnet":
+            discriminator = ResNetDiscriminator(
                 self.hparams.img_dim, **discriminator_params)
         else:
             raise NotImplementedError()
