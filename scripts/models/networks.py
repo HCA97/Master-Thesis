@@ -218,8 +218,8 @@ class PatchDiscriminator(nn.Module):
         self.conv_blocks = nn.Sequential(*layers)
         self.l1 = ConvBlock(base_channels*2**(n_layers-1),
                             1,
-                            kernel_size=3,
-                            padding=1,
+                            kernel_size=kernel_size,
+                            padding=padding,
                             use_instance_norm=False,
                             use_bn=False,
                             padding_mode=padding_mode,

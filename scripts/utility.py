@@ -7,7 +7,44 @@ import torch as th
 import torchvision
 import lpips
 
-# from .models import *
+import PIL
+import cv2
+
+
+class Skeleton(th.nn.Module):
+    def __init__(self, ratio=0.9):
+        super().__init__()
+        self.ratio = max(0, min(ratio, 1))
+
+    def forward(self, img):
+        if type(img) != PIL.Image.Image:
+            raise RuntimeError(
+                f"Inputmust be PIL.Image but it is {type(img)}")
+
+        # read the image and convert to gray
+        img_ = np.asarray(img)
+        gray = cv2.cvtColor(img_, cv2.COLOR_RGB2GRAY)
+
+        # enhance the contrast
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        gray = clahe.apply(gray)
+
+        # canny
+        edge = cv2.Canny(gray, 100, 200)
+
+        # remove short edges
+        cnts, _ = cv2.findContours(edge, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+        cnts_ = []
+        for cnt in cnts:
+            if len(cnt) > 10 and np.random.uniform(0, 1) < self.ratio:
+                cnts_.append(cnt)
+
+        # re draw the edges
+        cnt = cv2.drawContours(
+            255*np.ones_like(gray, dtype=np.uint8), cnts_, -1, 0, 1)
+
+        # return PIL.Image
+        return PIL.Image.fromarray(cnt).convert('RGB')
 
 
 def compute_loss(predictions: Union[th.Tensor, List[th.Tensor]], label: int, criteria: th.nn.Module):
