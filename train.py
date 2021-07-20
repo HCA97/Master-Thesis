@@ -28,19 +28,19 @@ discriminator_params = {
                         }
 }
 
-img_dim = (3, 48, 96)
+img_dim = (3, 64, 64)
 batch_size = 64
 max_epochs = 500
 interval = 25
 
 
-data_dir1 = "/scratch/s7hialtu/potsdam_cars"
-data_dir2 = "/scratch/s7hialtu/gta_cars_online_masked_cars"
-results_dir = "/scratch/s7hialtu/munit_edge2car"
+data_dir1 = "/scratch/s7hialtu/train_shoes"
+data_dir2 = "/scratch/s7hialtu/train_shoes"
+results_dir = "/scratch/s7hialtu/munit_edge2shoes"
 
 if not os.path.isdir(data_dir1):
-    data_dir1 = "../potsdam_data/potsdam_cars"
-    data_dir2 = "../potsdam_data/gta_cars_online_masked_cars"
+    data_dir1 = "../edges2shoes/train_shoes"
+    data_dir2 = "../edges2shoes/train_shoes"
     results_dir = "logs"
 
 # DATA AUG FOR
@@ -51,7 +51,7 @@ transform1 = transforms.Compose([transforms.Resize(img_dim[1:]),
                                 transforms.ColorJitter(hue=[-0.1, 0.1]),
                                 transforms.Normalize([0.5], [0.5])])
 transform2 = transforms.Compose([transforms.Resize(img_dim[1:]),
-                                 Skeleton(ratio=0.9),
+                                 Skeleton(ratio=1),
                                  transforms.RandomRotation(
                                      degrees=5, resample=PIL.Image.NEAREST, fill=255),
                                  transforms.ToTensor(),
@@ -69,7 +69,7 @@ model = MUNIT(img_dim,
               #   weight_decay_disc=1e-3,
               #   weight_decay_gen=1e-3,
               #   use_lr_scheduler=True,
-              l4=0,
+              l4=10,
               fid_interval=interval,
               use_lpips=False)
 
