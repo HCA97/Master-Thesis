@@ -30,17 +30,17 @@ discriminator_params = {
 
 img_dim = (3, 64, 64)
 batch_size = 64
-max_epochs = 500
+max_epochs = 200
 interval = 25
 
 
 data_dir1 = "/scratch/s7hialtu/train_shoes"
-data_dir2 = "/scratch/s7hialtu/train_shoes"
-results_dir = "/scratch/s7hialtu/munit_edge2shoes"
+data_dir2 = "/scratch/s7hialtu/train_edges"
+results_dir = "/scratch/s7hialtu/munit_edges2shoes"
 
 if not os.path.isdir(data_dir1):
     data_dir1 = "../edges2shoes/train_shoes"
-    data_dir2 = "../edges2shoes/train_shoes"
+    data_dir2 = "../edges2shoes/train_edges"
     results_dir = "logs"
 
 # DATA AUG FOR
@@ -48,12 +48,11 @@ transform1 = transforms.Compose([transforms.Resize(img_dim[1:]),
                                 transforms.ToTensor(),
                                 transforms.RandomHorizontalFlip(p=0.5),
                                 transforms.RandomVerticalFlip(p=0.5),
-                                transforms.ColorJitter(hue=[-0.1, 0.1]),
-                                transforms.Normalize([0.5], [0.5])])
+                                # transforms.ColorJitter(hue=[-0.1, 0.1]),
+                                 transforms.Normalize([0.5], [0.5])])
 transform2 = transforms.Compose([transforms.Resize(img_dim[1:]),
-                                 Skeleton(ratio=1),
-                                 transforms.RandomRotation(
-                                     degrees=5, resample=PIL.Image.NEAREST, fill=255),
+                                #  transforms.RandomRotation(
+                                 #      degrees=5, resample=PIL.Image.NEAREST, fill=255),
                                  transforms.ToTensor(),
                                  transforms.RandomHorizontalFlip(p=0.5),
                                  transforms.RandomVerticalFlip(p=0.5),
