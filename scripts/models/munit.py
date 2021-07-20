@@ -37,8 +37,7 @@ class MUNIT(pl.LightningModule):
                  # Model Parameters
                  discriminator_params=None,
                  generator_params=None,
-                 gen_model="munit",
-                 disc_model="munit1",
+                 disc_model="patch",
                  gen_init="gaussian",
                  disc_init="gaussian",
                  # Training Loss
@@ -57,14 +56,12 @@ class MUNIT(pl.LightningModule):
         self.save_hyperparameters()
 
         generator_params = generator_params if generator_params else {}
-        if gen_model == "munit":
-            self.generator = MUNITGEN(img_dim, **generator_params)
+        self.generator = MUNITGEN(img_dim, **generator_params)
         self.generator.apply(weights_init(gen_init))
 
         discriminator_params = discriminator_params if discriminator_params else {}
-        if disc_model == "munit1":
-            self.discriminator = MultiDiscriminator(
-                img_dim, **discriminator_params)
+        self.discriminator = MultiDiscriminator(
+            img_dim, disc_model=disc_model, **discriminator_params)
         self.discriminator.apply(weights_init(disc_init))
 
         self.criterion = L2Norm()

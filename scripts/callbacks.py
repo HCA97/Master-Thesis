@@ -146,24 +146,27 @@ class ShowWeights(Callback):
             moving_avg = getattr(pl_module.hparams, "moving_avg", False)
 
             pl_module.eval()
-            with th.no_grad():
-                if moving_avg:
-                    for (name, params), params_avg in zip(pl_module.generator.named_parameters(), pl_module.generator_avg.parameters()):
-                        if params.grad is not None:
-                            writer.add_histogram(
-                                "Generator/" + name, params.detach().cpu().numpy(), trainer.current_epoch)
-                            writer.add_histogram(
-                                "Generator_Avg/" + name, params_avg.detach().cpu().numpy(), trainer.current_epoch)
-                else:
-                    for name, params in pl_module.generator.named_parameters():
-                        if params.grad is not None:
-                            writer.add_histogram(
-                                "Generator/" + name, params.detach().cpu().numpy(), trainer.current_epoch)
+            try:
+                with th.no_grad():
+                    if moving_avg:
+                        for (name, params), params_avg in zip(pl_module.generator.named_parameters(), pl_module.generator_avg.parameters()):
+                            if params.grad is not None:
+                                writer.add_histogram(
+                                    "Generator/" + name, params.detach().cpu().numpy(), trainer.current_epoch)
+                                writer.add_histogram(
+                                    "Generator_Avg/" + name, params_avg.detach().cpu().numpy(), trainer.current_epoch)
+                    else:
+                        for name, params in pl_module.generator.named_parameters():
+                            if params.grad is not None:
+                                writer.add_histogram(
+                                    "Generator/" + name, params.detach().cpu().numpy(), trainer.current_epoch)
 
-                for name, params in pl_module.discriminator.named_parameters():
-                    if params.grad is not None:
-                        writer.add_histogram(
-                            "Discriminator/" + name, params.detach().cpu().numpy(), trainer.current_epoch)
+                    for name, params in pl_module.discriminator.named_parameters():
+                        if params.grad is not None:
+                            writer.add_histogram(
+                                "Discriminator/" + name, params.detach().cpu().numpy(), trainer.current_epoch)
+            except ValueError:
+                pass
             pl_module.train()
 
 

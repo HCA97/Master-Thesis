@@ -65,47 +65,41 @@ class EncoderLatent(nn.Module):
 class MultiDiscriminator(nn.Module):
     """https://github.com/eriklindernoren/PyTorch-GAN/blob/36d3c77e5ff20ebe0aeefd322326a134a279b93e/implementations/munit/models.py#L197"""
 
-    def __init__(self, img_size, n_res=3, kernel_size=4, base_channels=64, use_instance_norm=True, use_sigmoid=False, use_spectral_norm=True, padding_mode="zeros", use_dropout=False):
+    def __init__(self, img_size, n_res=3, disc_model="patch", disc_parameters=None):
+        # kernel_size = 4, base_channels = 64, use_instance_norm = True, use_sigmoid = False, use_spectral_norm = True, padding_mode = "zeros", use_dropout = False):
         super().__init__()
 
         input_channels, input_height, input_width = img_size
 
         self.n_res = n_res
+        self.disc_parameters = disc_parameters if disc_parameters else None
+        self.disc_model = disc_model
+
+        if disc_model == "basic":
+            disc = BasicDiscriminator
+        elif disc_model == "resnet":
+            disc = ResNetDiscriminator
+        elif disc_model == "patch":
+            disc = PatchDiscriminator
 
         # IMAGE DOMAIN 1
         self.multi_res1 = nn.ModuleList(
-            [PatchDiscriminator(img_size,
-                                base_channels=base_channels,
-                                kernel_size=kernel_size,
-                                padding=int((kernel_size - 1) / 2),
-                                use_instance_norm=use_instance_norm,
-                                use_sigmoid=use_sigmoid,
-                                use_spectral_norm=use_spectral_norm,
-                                padding_mode=padding_mode,
-                                use_dropout=use_dropout)
-             for _ in range(n_res)]
-        )
+            [disc(img_size, **disc_parameters) for _ in range(n_res)])
 
         # IMAGE DOMAIN 2
         self.multi_res2 = nn.ModuleList(
-            [PatchDiscriminator(img_size,
-                                base_channels=base_channels,
-                                kernel_size=kernel_size,
-                                padding=int((kernel_size - 1) / 2),
-                                use_instance_norm=use_instance_norm,
-                                use_sigmoid=use_sigmoid,
-                                use_spectral_norm=use_spectral_norm,
-                                padding_mode=padding_mode,
-                                use_dropout=use_dropout)
-             for _ in range(n_res)]
-        )
+            [disc(img_size, **disc_parameters) for _ in range(n_res)])
 
         self.downsample = nn.AvgPool2d(3, padding=1, stride=2)
 
     def forward(self, x, label):
         ret = []
         for disc1, disc2 in zip(self.multi_res1,  self.multi_res2):
-            ret.append(disc1(x) if label == 1 else disc2(x))
+            x_pred = disc1(x) if label == 1 else disc2(x)
+            if type(x_pred) == list:
+                ret.extend(x_pred)
+            else:
+                ret.append(x_pred)
             x = self.downsample(x)
         return ret
 
@@ -121,7 +115,8 @@ class BasicPatchDiscriminator(nn.Module):
                  use_dropout=True,
                  use_spectral_norm=False,
                  padding_mode="reflect",
-                 use_bn_first_conv=False):
+                 use_bn_first_conv=False,
+                 **kwargs):
         super().__init__()
 
         self.basic = BasicDiscriminator(img_size,
@@ -184,7 +179,8 @@ class PatchDiscriminator(nn.Module):
                  use_dropout=True,
                  use_spectral_norm=False,
                  padding_mode="zeros",
-                 use_bn_first_conv=False):
+                 use_bn_first_conv=False,
+                 **kwargs):
         super().__init__()
 
         self.n_layers = n_layers
@@ -328,7 +324,8 @@ class BasicDiscriminator(nn.Module):
                  bn_mode="old",
                  use_spectral_norm=False,
                  padding_mode="zeros",
-                 use_bn_first_conv=False):
+                 use_bn_first_conv=False,
+                 **kwargs):
         super().__init__()
 
         self.heat_map = heat_map
