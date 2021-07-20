@@ -16,10 +16,17 @@ from scripts.callbacks import *
 generator_params = {"n_layers": 2,
                     "base_channels": 32,
                     "padding_mode": "reflect"}
-discriminator_params = {"base_channels": 64,
-                        "n_res": 1,
-                        "kernel_size": 3,
-                        "padding_mode": "reflect"}
+discriminator_params = {
+    "n_res": 1,
+    "disc_parameters": {"base_channels": 64,
+                        "padding_mode": "reflect",
+                        "use_sigmoid": False,
+                        "use_dropout": False,
+                        "use_spectral_norm": True,
+                        "use_instance_norm": True,
+                        "n_layers": 4
+                        }
+}
 
 img_dim = (3, 48, 96)
 batch_size = 64
@@ -32,7 +39,7 @@ data_dir2 = "/scratch/s7hialtu/gta_cars_online_masked_cars"
 results_dir = "/scratch/s7hialtu/munit_edge2car"
 
 if not os.path.isdir(data_dir1):
-    data_dir1 = "../potsdam_data/potsdam_cars_val"
+    data_dir1 = "../potsdam_data/potsdam_cars"
     data_dir2 = "../potsdam_data/gta_cars_online_masked_cars"
     results_dir = "logs"
 
@@ -56,6 +63,7 @@ model = MUNIT(img_dim,
               discriminator_params=discriminator_params,
               generator_params=generator_params,
               gen_init="kaiming",
+              disc_model="basic",
               learning_rate_gen=0.0001,
               learning_rate_disc=0.0004,
               #   weight_decay_disc=1e-3,
