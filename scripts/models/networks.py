@@ -63,10 +63,8 @@ class EncoderLatent(nn.Module):
 # -------------------------------------------------------- #
 
 class MultiDiscriminator(nn.Module):
-    """https://github.com/eriklindernoren/PyTorch-GAN/blob/36d3c77e5ff20ebe0aeefd322326a134a279b93e/implementations/munit/models.py#L197"""
 
     def __init__(self, img_size, n_res=3, disc_model="patch", disc_parameters=None):
-        # kernel_size = 4, base_channels = 64, use_instance_norm = True, use_sigmoid = False, use_spectral_norm = True, padding_mode = "zeros", use_dropout = False):
         super().__init__()
 
         input_channels, input_height, input_width = img_size

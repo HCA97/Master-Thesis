@@ -108,16 +108,17 @@ class MUNIT(pl.LightningModule):
         real, fake = batch
 
         # append real image activation for FID
-        if len(self.act_real) < self.n_samples:
-            act = np.squeeze(vgg16_get_activation_maps(
-                real, layer_idx=33, device="cpu", normalize_range=(-1, 1)).numpy())
-            self.act_real = np.concatenate(
-                (self.act_real, act), axis=0) if len(self.act_real) > 0 else act
+        if self.hparams.fid_interval > 0:
+            if len(self.act_real) < self.n_samples:
+                act = np.squeeze(vgg16_get_activation_maps(
+                    real, layer_idx=33, device="cpu", normalize_range=(-1, 1)).numpy())
+                self.act_real = np.concatenate(
+                    (self.act_real, act), axis=0) if len(self.act_real) > 0 else act
 
-        # append fake images or noise vectors for FID
-        if len(self.gen_input) < self.n_samples:
-            self.gen_input = th.cat((self.gen_input, fake), dim=0) if len(
-                self.gen_input) > 0 else fake
+            # append fake images or noise vectors for FID
+            if len(self.gen_input) < self.n_samples:
+                self.gen_input = th.cat((self.gen_input, fake), dim=0) if len(
+                    self.gen_input) > 0 else fake
 
         # store the first batch for callback
         if self.imgs_real is None:
@@ -227,7 +228,9 @@ class MUNIT(pl.LightningModule):
 
     def on_epoch_end(self):
         # pass
-        if (self.current_epoch + 1) % self.hparams.fid_interval == 0 or self.current_epoch == 0:
+        if self.hparams.fid_interval > 0 and \
+            ((self.current_epoch + 1) % self.hparams.fid_interval == 0 or
+             self.current_epoch == 0):
 
             self.generator.eval()
 
