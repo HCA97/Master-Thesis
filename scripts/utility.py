@@ -2,6 +2,7 @@ from typing import Tuple, List, Union
 import math
 
 import numpy as np
+import tqdm
 from scipy.linalg import sqrtm
 import torch as th
 import torchvision
@@ -9,6 +10,43 @@ import lpips
 
 import PIL
 import cv2
+
+
+def sim_gan_initial_start(dataloader, generator, discriminator, img_dim=(3, 32, 64), n_epochs=10, device="cuda:0"):
+
+    # PRE-Train REFINER
+    alpha = 0.9
+    gen = generator.to(device)
+    opt = th.optim.Adam(gen.parameters())
+    rec_loss = lpips.LPIPS(net="vgg").to(device)
+    for _ in tqdm.tqdm(range(n_epochs), desc="Generator"):
+        for _, fake in dataloader:
+            opt.zero_grad()
+            noise = 2 * th.rand(fake.shape, device=device) - 1
+            fake_rec = gen(alpha * fake.to(device) + (1 - alpha) * noise)
+            loss = th.mean(th.abs(fake_rec - fake.to(device))) + \
+                th.mean(rec_loss(fake_rec, fake.to(device), normalize=True))
+            loss.backward()
+            opt.step()
+
+    # PRE-Train Discriminator
+    disc = discriminator.to(device)
+
+    opt = th.optim.Adam(disc.parameters())
+    loss = th.nn.BCELoss()
+    for _ in tqdm.tqdm(range(n_epochs), desc="Discriminator"):
+        for real, fake in dataloader:
+            opt.zero_grad()
+            with th.no_grad():
+                fake_rec = gen(fake.to(device))
+            fake_pred = disc(fake_rec)
+            real_pred = disc(real.to(device))
+            l = loss(fake_pred, th.zeros_like(fake_pred)) + \
+                loss(fake_pred, th.ones_like(real_pred))
+            l.backward()
+            opt.step()
+
+    return gen, disc
 
 
 class Skeleton(th.nn.Module):
