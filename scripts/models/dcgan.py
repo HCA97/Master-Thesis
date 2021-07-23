@@ -277,7 +277,7 @@ class GAN(pl.LightningModule):
 
     def on_epoch_end(self):
 
-        if (self.current_epoch + 1) % self.hparams.fid_interval == 0 or self.current_epoch == 0 and len(self.gen_input) >= self.n_samples:
+        if ((self.current_epoch + 1) % self.hparams.fid_interval == 0 or self.current_epoch == 0) and len(self.gen_input) >= self.n_samples:
 
             self.generator.eval()
 
