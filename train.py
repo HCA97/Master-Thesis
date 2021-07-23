@@ -28,19 +28,19 @@ discriminator_params = {
                         }
 }
 
-img_dim = (3, 64, 64)
+img_dim = (3, 32, 64)
 batch_size = 64
 max_epochs = 200
 interval = 25
 
 
-data_dir1 = "/scratch/s7hialtu/train_shoes"
-data_dir2 = "/scratch/s7hialtu/train_edges"
-results_dir = "/scratch/s7hialtu/munit_edges2shoes"
+data_dir1 = "/scratch/s7hialtu/potsdam_cars"
+data_dir2 = "/scratch/s7hialtu/gta_cars_online_mask"
+results_dir = "/scratch/s7hialtu/munit_mask2cars"
 
 if not os.path.isdir(data_dir1):
-    data_dir1 = "../edges2shoes/train_shoes"
-    data_dir2 = "../edges2shoes/train_edges"
+    data_dir1 = "../potsdam_data/potsdam_cars"
+    data_dir2 = "../potsdam_data/gta_cars_online_mask"
     results_dir = "logs"
 
 # DATA AUG FOR
@@ -48,15 +48,15 @@ transform1 = transforms.Compose([transforms.Resize(img_dim[1:]),
                                 transforms.ToTensor(),
                                 transforms.RandomHorizontalFlip(p=0.5),
                                 transforms.RandomVerticalFlip(p=0.5),
-                                # transforms.ColorJitter(hue=[-0.1, 0.1]),
+                                transforms.ColorJitter(hue=[-0.1, 0.1]),
                                  transforms.Normalize([0.5], [0.5])])
 transform2 = transforms.Compose([transforms.Resize(img_dim[1:]),
-                                #  transforms.RandomRotation(
-                                 #      degrees=5, resample=PIL.Image.NEAREST, fill=255),
-                                 transforms.ToTensor(),
-                                 transforms.RandomHorizontalFlip(p=0.5),
-                                 transforms.RandomVerticalFlip(p=0.5),
-                                 transforms.Normalize([0.5], [0.5])])
+                                 transforms.RandomRotation(
+                                     degrees=5, resample=PIL.Image.NEAREST, fill=0),
+                                transforms.ToTensor(),
+                                transforms.RandomHorizontalFlip(p=0.5),
+                                transforms.RandomVerticalFlip(p=0.5),
+                                transforms.Normalize([0.5], [0.5])])
 
 model = MUNIT(img_dim,
               discriminator_params=discriminator_params,
@@ -83,11 +83,9 @@ callbacks = [
     LatentDimInterpolator(
         interpolate_epoch_interval=interval, num_samples=10),
     ModelCheckpoint(period=interval, save_top_k=-1, filename="{epoch}"),
-    # EarlyStopping(monitor="fid", patience=10*interval, mode="min"),
     MUNITCallback(epoch_interval=interval),
     Pix2PixCallback(epoch_interval=interval),
-    ShowWeights(),
-    # MyEarlyStopping(300, threshold=5, monitor="fid", mode="min")
+    ShowWeights()
 ]
 
 # Apparently Trainer has logger by default
