@@ -41,8 +41,8 @@ def sim_gan_initial_start(dataloader, generator, discriminator, img_dim=(3, 32, 
                 fake_rec = gen(fake.to(device))
             fake_pred = disc(fake_rec)
             real_pred = disc(real.to(device))
-            l = loss(fake_pred, th.zeros_like(fake_pred)) + \
-                loss(fake_pred, th.ones_like(real_pred))
+            l = compute_loss(fake_pred, 0, loss) + \
+                compute_loss(real_pred, 1, loss)
             l.backward()
             opt.step()
 
@@ -50,9 +50,11 @@ def sim_gan_initial_start(dataloader, generator, discriminator, img_dim=(3, 32, 
 
 
 class Skeleton(th.nn.Module):
-    def __init__(self, ratio=0.9):
+    def __init__(self, ratio=0.9, min_length=10, smooth=False):
         super().__init__()
         self.ratio = max(0, min(ratio, 1))
+        self.min_length = min_length
+        self.smooth = smooth
 
     def forward(self, img):
         if type(img) != PIL.Image.Image:
@@ -68,13 +70,19 @@ class Skeleton(th.nn.Module):
         gray = clahe.apply(gray)
 
         # canny
+        if self.smooth:
+            gray = cv2.medianBlur(gray, 5)
         edge = cv2.Canny(gray, 100, 200)
 
         # remove short edges
         cnts, _ = cv2.findContours(edge, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+        # idx = np.argsort([len(cnt) for cnt in cnts])
+        # cnts_ = []
+        # for i in idx[-5:]:
+        #     cnts_.append(cnts[i])
         cnts_ = []
         for cnt in cnts:
-            if len(cnt) > 10 and np.random.uniform(0, 1) < self.ratio:
+            if len(cnt) > self.min_length and np.random.uniform(0, 1) < self.ratio:
                 cnts_.append(cnt)
 
         # re draw the edges
