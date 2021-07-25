@@ -12,10 +12,10 @@ from scripts.utility import *
 from scripts.dataloader import *
 from scripts.callbacks import *
 
-pl.utilities.seed.seed_everything(seed=0)
+# pl.utilities.seed.seed_everything(seed=0)
 
 # POTSDAM CARS
-generator_params = {"n_layers": 2,
+generator_params = {"n_layers": 4,
                     "base_channels": 32,
                     "padding_mode": "reflect"}
 discriminator_params = {
@@ -35,14 +35,13 @@ batch_size = 64
 max_epochs = 500
 interval = 25
 
-
-data_dir1 = "/scratch/s7hialtu/potsdam_cars"
-data_dir2 = "/scratch/s7hialtu/gta_cars_online_masked_cars"
-results_dir = "/scratch/s7hialtu/munit_simple_edges2cars"
+data_dir1 = "/scratch/s7hialtu/potsdam_cars_all"
+data_dir2 = "/scratch/s7hialtu/artificial_cars"
+results_dir = "/scratch/s7hialtu/munit_artificial2real"
 
 if not os.path.isdir(data_dir1):
-    data_dir1 = "../potsdam_data/potsdam_cars"
-    data_dir2 = "../potsdam_data/gta_cars_online_masked_cars"
+    data_dir1 = "../potsdam_data/potsdam_cars_val"
+    data_dir2 = "../potsdam_data/artifical_cars_small"
     results_dir = "logs"
 
 # DATA AUG FOR
@@ -51,15 +50,13 @@ transform1 = transforms.Compose([transforms.Resize(img_dim[1:]),
                                 transforms.RandomHorizontalFlip(p=0.5),
                                 transforms.RandomVerticalFlip(p=0.5),
                                 transforms.ColorJitter(hue=[-0.1, 0.1]),
-                                 transforms.Normalize([0.5], [0.5])])
-transform2 = transforms.Compose([transforms.Resize(img_dim[1:]),
-                                 Skeleton(1, 20, True),
-                                 transforms.RandomRotation(
-                                     degrees=5, resample=PIL.Image.NEAREST, fill=255),
-                                transforms.ToTensor(),
-                                transforms.RandomHorizontalFlip(p=0.5),
-                                transforms.RandomVerticalFlip(p=0.5),
                                 transforms.Normalize([0.5], [0.5])])
+transform2 = transforms.Compose([transforms.Resize(img_dim[1:]),
+                                 transforms.ToTensor(),
+                                 transforms.RandomHorizontalFlip(p=0.5),
+                                 transforms.RandomVerticalFlip(p=0.5),
+                                 transforms.Normalize([0.5], [0.5])])
+
 
 model = MUNIT(img_dim,
               discriminator_params=discriminator_params,
@@ -68,9 +65,9 @@ model = MUNIT(img_dim,
               disc_model="basic",
               learning_rate_gen=0.0001,
               learning_rate_disc=0.0004,
-              #   weight_decay_disc=1e-3,
-              #   weight_decay_gen=1e-3,
-              #   use_lr_scheduler=True,
+              weight_decay_disc=1e-3,
+              weight_decay_gen=1e-3,
+              use_lr_scheduler=True,
               l4=10,
               fid_interval=interval,
               use_lpips=False)

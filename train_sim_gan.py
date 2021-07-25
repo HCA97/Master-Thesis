@@ -20,18 +20,18 @@ discriminator_params = {"base_channels": 64, "padding_mode": "reflect",
                         "n_layers": 4, "bn_mode": "default"}
 
 img_dim = (3, 32, 64)
-batch_size = 64
+batch_size = 512
 max_epochs = 1000
 interval = 25
 
 
 data_dir1 = "/scratch/s7hialtu/potsdam_cars_all"
-data_dir2 = "/scratch/s7hialtu/gta_cars_online"
-results_dir = "/scratch/s7hialtu/sim_gan_gta"
+data_dir2 = "/scratch/s7hialtu/data_epoch=899_10000"
+results_dir = "/scratch/s7hialtu/sim_gan"
 
 if not os.path.isdir(data_dir1):
     data_dir1 = "../potsdam_data/potsdam_cars_val"
-    data_dir2 = "../potsdam_data/gta_cars_online"
+    data_dir2 = "../experiments/dcgan_disc_double_params_padding_reflect_lr_scheduler/version_0/data_epoch=899_10000"
     results_dir = "logs"
 
 # DATA AUG FOR
@@ -44,7 +44,6 @@ transform1 = transforms.Compose([transforms.Resize(img_dim[1:]),
 transform2 = transforms.Compose([transforms.Resize(img_dim[1:]),
                                  transforms.RandomHorizontalFlip(p=0.5),
                                  transforms.RandomVerticalFlip(p=0.5),
-                                 transforms.ColorJitter(hue=[-0.1, 0.1]),
                                  transforms.ToTensor(),
                                  transforms.Normalize([0.5], [0.5])])
 
