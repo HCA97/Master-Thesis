@@ -30,8 +30,8 @@ data_dir2 = "/scratch/s7hialtu/data_epoch=899_10000"
 results_dir = "/scratch/s7hialtu/sim_gan"
 
 if not os.path.isdir(data_dir1):
-    data_dir1 = "../potsdam_data/potsdam_cars_val"
-    data_dir2 = "../experiments/dcgan_disc_double_params_padding_reflect_lr_scheduler/version_0/data_epoch=899_10000"
+    data_dir1 = "../potsdam_data/potsdam_cars_all"
+    data_dir2 = "experiments/dcgan_disc_double_params_padding_reflect_lr_scheduler/version_0/data_epoch=899_10000"
     results_dir = "logs"
 
 # DATA AUG FOR
@@ -66,7 +66,8 @@ model = GAN(img_dim,
 model.generator, model.discriminator = sim_gan_initial_start(potsdam.train_dataloader(),
                                                              model.generator,
                                                              model.discriminator,
-                                                             img_dim=img_dim)
+                                                             img_dim=img_dim,
+                                                             n_epochs=5)
 
 callbacks = [
     TensorboardGeneratorSampler(
