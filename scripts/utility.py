@@ -50,11 +50,12 @@ def sim_gan_initial_start(dataloader, generator, discriminator, img_dim=(3, 32, 
 
 
 class Skeleton(th.nn.Module):
-    def __init__(self, ratio=0.9, min_length=10, smooth=False):
+    def __init__(self, ratio=0.9, min_length=10, smooth=False, canny=True):
         super().__init__()
         self.ratio = max(0, min(ratio, 1))
         self.min_length = min_length
         self.smooth = smooth
+        self.canny = canny
 
     def forward(self, img):
         if type(img) != PIL.Image.Image:
@@ -69,25 +70,32 @@ class Skeleton(th.nn.Module):
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         gray = clahe.apply(gray)
 
-        # canny
-        if self.smooth:
-            gray = cv2.medianBlur(gray, 5)
-        edge = cv2.Canny(gray, 100, 200)
+        if self.canny:
+            if self.smooth:
+                gray = cv2.medianBlur(gray, 5)
 
-        # remove short edges
-        cnts, _ = cv2.findContours(edge, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-        # idx = np.argsort([len(cnt) for cnt in cnts])
-        # cnts_ = []
-        # for i in idx[-5:]:
-        #     cnts_.append(cnts[i])
-        cnts_ = []
-        for cnt in cnts:
-            if len(cnt) > self.min_length and np.random.uniform(0, 1) < self.ratio:
-                cnts_.append(cnt)
+            edge = cv2.Canny(gray, 100, 200)
 
-        # re draw the edges
-        cnt = cv2.drawContours(
-            255*np.ones_like(gray, dtype=np.uint8), cnts_, -1, 0, 1)
+            # remove short edges
+            cnts, _ = cv2.findContours(
+                edge, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+            cnts_ = []
+            for cnt in cnts:
+                if len(cnt) > self.min_length and np.random.uniform(0, 1) < self.ratio:
+                    cnts_.append(cnt)
+
+            # re draw the edges
+            cnt = cv2.drawContours(
+                255*np.ones_like(gray, dtype=np.uint8), cnts_, -1, 0, 1)
+        else:
+            if self.smooth:
+                gray = cv2.GaussianBlur(gray, (5, 5), 3)
+            edge = cv2.Laplacian(gray, cv2.CV_64F, ksize=5)
+            edge_square = edge**2
+            edge_square /= edge_square.max()
+            # edge_square = (edge - edge.min()) / (edge.max() - edge.min())
+            cnt = (255*edge_square).astype(np.uint8)
+            # cnt = 255*(edge > 0.1 * np.min(edge)).astype(np.uint8)
 
         # return PIL.Image
         return PIL.Image.fromarray(cnt).convert('RGB')
@@ -338,7 +346,8 @@ def fid_score(imgs1: th.Tensor,
               device: str = "cpu",
               normalize_range: Tuple[int, int] = (-1, 1),
               use_bn: bool = True,
-              skip_vgg: bool = False) -> float:
+              skip_vgg: bool = False,
+              memorized_fid: bool = False) -> float:
     """Computes the FID score between ``imgs1`` and ``imgs2`` using VGG-16.
 
     Parameters
@@ -409,6 +418,28 @@ def fid_score(imgs1: th.Tensor,
         covmean = covmean.real
     # calculate score
     fid = ssdiff + np.trace(sigma1 + sigma2 - 2.0 * covmean)
+
+    if memorized_fid:
+        # act2 is generated
+        # act1 is real images
+
+        # norms inverse, replace inf values with 0
+        act1_norm = np.expand_dims(np.linalg.norm(act1, axis=1), 1)
+        act2_norm = np.expand_dims(np.linalg.norm(act2, axis=1), 1)
+        norms_inverse = 1 / (act2_norm.dot(act1_norm.T))
+
+        norms_inverse[np.isinf(norms_inverse)] = 0
+
+        # cos distance between two activations
+        cos_distances = (1 - norms_inverse*act2.dot(act1.T))
+        cos_distance = cos_distances.min(axis=1)  # min for each row
+        d = np.mean(cos_distance)
+
+        import matplotlib.pyplot as plt
+        plt.hist(cos_distance)
+        plt.show()
+
+        fid = fid / (d if d > 1e-10 else 1)
     return fid
 
 
