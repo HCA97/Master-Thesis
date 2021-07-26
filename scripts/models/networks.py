@@ -403,6 +403,8 @@ class MUNITGEN(nn.Module):
 
         self.style_dim = style_dim
 
+        self.my_loss = False
+
     def forward(self, x1, x2, inference=False):
 
         c1, s1 = self.encoder1(x1)
@@ -414,7 +416,17 @@ class MUNITGEN(nn.Module):
             x2.size(0), self.style_dim), device=x2.device)
 
         x11 = self.decoder1(c1, s1)
-        x22 = self.decoder1(c2, s2)
+        x22 = self.decoder2(c2, s2)
+
+        if self.my_loss:
+            s11_ = th.normal(0, 1, size=(
+                x1.size(0), self.style_dim), device=x1.device)
+
+            s22_ = th.normal(0, 1, size=(
+                x2.size(0), self.style_dim), device=x2.device)
+
+            x11_ = self.decoder1(c1, s11_)
+            x22_ = self.decoder2(c2, s22_)
 
         x12 = self.decoder2(c1, s1_)
         x21 = self.decoder1(c2, s2_)
@@ -426,6 +438,8 @@ class MUNITGEN(nn.Module):
         x212 = self.decoder2(c21, s2)
 
         if inference:
+            if self.my_loss:
+                return [x12, x21, x121, x212, x11, x22, x11_, x22_]
             return [x12, x21, x121, x212, x11, x22]
 
         # compute all the regularization
@@ -434,6 +448,8 @@ class MUNITGEN(nn.Module):
         loss_c = th.mean(th.abs(c12 - c1.detach())) + \
             th.mean(th.abs(c21 - c2.detach()))
         loss_cyc = th.mean(th.abs(x121 - x1)) + th.mean(th.abs(x212 - x2))
+        if self.my_loss:
+            return [x12, x21, x11_, x22_], [loss_rec, loss_s, loss_c, loss_cyc]
         return [x12, x21], [loss_rec, loss_s, loss_c, loss_cyc]
 
 
@@ -629,18 +645,16 @@ class RefinerNet(nn.Module):
 
         self.reconstruct = reconstruct
 
-        layers = [ResBlock(n_channels, init_channels,
+        layers = [ResBlock(n_channels, init_channels, inject_noise=inject_noise, padding_mode=padding_mode,
                            act=act, bn_mode=bn_mode, use_spectral_norm=use_spectral_norm)]
         for _ in range(n_layers-1):
-            if inject_noise:
-                layers.append(NoiseLayer(init_channels))
-
             layers.append(
-                ResBlock(init_channels, init_channels, act=act, bn_mode=bn_mode, padding_mode=padding_mode, use_spectral_norm=use_spectral_norm))
+                ResBlock(init_channels, init_channels, inject_noise=inject_noise, padding_mode=padding_mode,
+                         act=act, bn_mode=bn_mode, use_spectral_norm=use_spectral_norm))
 
         self.conv_blocks = nn.Sequential(*layers)
         self.final = ConvBlock(
-            init_channels, 3, use_bn=False, act="tanh", bn_mode=bn_mode, padding_mode=padding_mode)
+            init_channels, n_channels, use_bn=False, act="tanh", padding_mode=padding_mode)
 
     def forward(self, x_in):
 
