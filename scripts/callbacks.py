@@ -52,12 +52,19 @@ class MUNITCallback(Callback):
             len1 = min(self.n_samples, len(x1))
             len2 = min(self.n_samples, len(x2))
 
-            x12, x21, x121, x212, x11, x22 = pl_module.forward(
-                x1[:len1], x2[:len2], True)
+            ret = pl_module.forward(x1[:len1], x2[:len2], True)
+            x12, x21, x121, x212, x11, x22 = ret[:6]
+
+            imgs_fake = [x1[:len1], x11, x12, x121]
+            imgs_real = [x2[:len2], x22, x21, x212]
+
+            if getattr(pl_module.generator, "my_loss", False):
+                x11_, x22_ = ret[6:]
+                imgs_fake.append(x11_)
+                imgs_real.append(x22_)
 
             # fake images - make a grid
-            imgs = th.cat(
-                [x1[:len1], x11, x12, x121], dim=0)
+            imgs = th.cat(imgs_fake, dim=0)
             grid = torchvision.utils.make_grid(
                 imgs, nrow=len1, normalize=self.normalize)
 
@@ -67,8 +74,7 @@ class MUNITCallback(Callback):
                 str_title, grid, global_step=trainer.current_epoch)
 
             # real images - make a grid
-            imgs = th.cat(
-                [x2[:len2], x22, x21, x212], dim=0)
+            imgs = th.cat(imgs_real, dim=0)
             grid = torchvision.utils.make_grid(
                 imgs, nrow=len2, normalize=self.normalize)
 

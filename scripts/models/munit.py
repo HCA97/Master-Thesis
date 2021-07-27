@@ -66,7 +66,7 @@ class MUNIT(pl.LightningModule):
 
         self.criterion = L2Norm()
 
-        if use_lpips:
+        if use_lpips or self.generator.my_loss:
             self.lpips = lpips.LPIPS(net='vgg')
 
         # ingerating FID score
@@ -75,7 +75,7 @@ class MUNIT(pl.LightningModule):
         self.act_samples = 64
         self.gen_input = []
 
-        # something else
+        # for callbacks
         self.imgs_real = None
         self.imgs_fake = None
 
@@ -140,10 +140,22 @@ class MUNIT(pl.LightningModule):
 
             real_loss = real_loss1 + real_loss2
 
-            # Fake Loss
-            ret = self.generator(fake, real)
-            x12, x21 = ret[0]
+            # Random Real Reconstruction
+            ret = self.generator(fake, real)[0]
+            # if self.generator.my_loss:
+            #     x11_, x22_ = ret[2:]
+            #     real_random_ret1 = self.discriminator(x11_.detach(), 0)
+            #     real_random_loss1 = compute_loss(
+            #         real_random_ret1, 1, self.criterion)
 
+            #     real_random_ret2 = self.discriminator(x22_.detach(), 1)
+            #     real_random_loss2 = compute_loss(
+            #         real_random_ret2, 1, self.criterion)
+
+            #     real_loss += real_random_loss1 + real_random_loss2
+
+            # Fake Loss
+            x12, x21 = ret[:2]
             fake_ret1 = self.discriminator(x12.detach(), 1)
             fake_loss1 = compute_loss(
                 fake_ret1, 0, self.criterion)
@@ -162,11 +174,14 @@ class MUNIT(pl.LightningModule):
             self.log("loss/disc_fake_1", fake_loss1)
             self.log("loss/disc_real_2", real_loss2)
             self.log("loss/disc_fake_2", fake_loss2)
+            # if self.generator.my_loss:
+            #     self.log("loss/disc_real_random_1", real_random_loss1)
+            #     self.log("loss/disc_real_random_2", real_random_loss2)
 
         # GENERATOR
         if optimizer_idx == 1:
             ret = self.generator(fake, real)
-            x12, x21 = ret[0]
+            x12, x21 = ret[0][:2]
             loss_rec, loss_s, loss_c, loss_cyc = ret[1]
 
             symmetry_loss = 0
@@ -175,17 +190,12 @@ class MUNIT(pl.LightningModule):
                 idx_1 = list(range(0, r//2))
                 idx_2 = list(range(r-1, r//2-1, -1))
 
-                a = x12[:, :, idx_1, :]
-                b = x12[:, :, idx_2, :]
+                for x in ret[0]:
+                    a = x[:, :, idx_1, :]
+                    b = x[:, :, idx_2, :]
 
-                symmetry_loss += self.hparams.gamma * \
-                    th.mean(th.abs(a - b))
-
-                a = x21[:, :, idx_1, :]
-                b = x21[:, :, idx_2, :]
-
-                symmetry_loss += self.hparams.gamma * \
-                    th.mean(th.abs(a - b))
+                    symmetry_loss += self.hparams.gamma * \
+                        th.mean(th.abs(a - b))
 
             lpips_loss = 0
             if self.hparams.use_lpips:
@@ -203,11 +213,34 @@ class MUNIT(pl.LightningModule):
 
             gen_loss = fake_loss1 + fake_loss2
 
+            # Random Reconstruction Loss
+            my_loss = 0
+            if self.generator.my_loss:
+                x11_, x22_ = ret[0][2:]
+
+                # realistic looking
+                real_random_ret1 = self.discriminator(x11_, 0)
+                real_random_loss1 = compute_loss(
+                    real_random_ret1, 1, self.criterion)
+
+                real_random_ret2 = self.discriminator(x22_, 1)
+                real_random_loss2 = compute_loss(
+                    real_random_ret2, 1, self.criterion)
+
+                # similar to the original image
+                my_loss_lpips = th.mean(self.lpips(fake,
+                                                   x11_, normalize=True))
+                my_loss_lpips += th.mean(self.lpips(real,
+                                                    x22_, normalize=True))
+
+                my_loss += real_random_loss1 + real_random_loss2 + my_loss_lpips
+
             # Total Loss
             result = self.hparams.l0 * gen_loss + self.hparams.l1 * loss_rec + \
                 self.hparams.l2 * loss_s + self.hparams.l3 * \
                 loss_c + self.hparams.l4 * loss_cyc + \
-                self.hparams.gamma * symmetry_loss + self.hparams.alpha * lpips_loss
+                self.hparams.gamma * symmetry_loss + self.hparams.alpha * lpips_loss + \
+                my_loss
 
             # Logging
             self.log("loss/adv_loss", self.hparams.l0 * gen_loss)
@@ -223,6 +256,10 @@ class MUNIT(pl.LightningModule):
             if self.hparams.use_lpips:
                 self.log("loss/gen_lpips_loss",
                          self.hparams.alpha * lpips_loss)
+            if self.generator.my_loss:
+                self.log("loss/gen_my_loss_lpips", my_loss_lpips)
+                self.log("loss/gen_my_loss_1", real_random_loss1)
+                self.log("loss/gen_my_loss_2", real_random_loss2)
 
         return result
 

@@ -90,12 +90,9 @@ class Skeleton(th.nn.Module):
         else:
             if self.smooth:
                 gray = cv2.GaussianBlur(gray, (5, 5), 3)
+
             edge = cv2.Laplacian(gray, cv2.CV_64F, ksize=5)
-            edge_square = edge**2
-            edge_square /= edge_square.max()
-            # edge_square = (edge - edge.min()) / (edge.max() - edge.min())
-            cnt = (255*edge_square).astype(np.uint8)
-            # cnt = 255*(edge > 0.1 * np.min(edge)).astype(np.uint8)
+            cnt = 255*(edge > 0.1 * np.min(edge)).astype(np.uint8)
 
         # return PIL.Image
         return PIL.Image.fromarray(cnt).convert('RGB')

@@ -388,7 +388,7 @@ class BasicDiscriminator(nn.Module):
 
 
 class MUNITGEN(nn.Module):
-    def __init__(self, img_dim, base_channels=64, use_spectral_norm=True, style_dim=8, act="relu", n_layers=3, padding_mode="zeros"):
+    def __init__(self, img_dim, base_channels=64, use_spectral_norm=True, style_dim=8, act="relu", n_layers=3, padding_mode="zeros", my_loss=False):
         super().__init__()
 
         self.encoder1 = MUNITEncoder(
@@ -403,7 +403,7 @@ class MUNITGEN(nn.Module):
 
         self.style_dim = style_dim
 
-        self.my_loss = False
+        self.my_loss = my_loss
 
     def forward(self, x1, x2, inference=False):
 
@@ -418,6 +418,10 @@ class MUNITGEN(nn.Module):
         x11 = self.decoder1(c1, s1)
         x22 = self.decoder2(c2, s2)
 
+        loss_rec = 0
+        loss_s = 0
+        loss_c = 0
+        loss_cyc = 0
         if self.my_loss:
             s11_ = th.normal(0, 1, size=(
                 x1.size(0), self.style_dim), device=x1.device)
@@ -427,6 +431,14 @@ class MUNITGEN(nn.Module):
 
             x11_ = self.decoder1(c1, s11_)
             x22_ = self.decoder2(c2, s22_)
+
+            c11_rec, s11_rec = self.encoder1(x11_)
+            c22_rec, s22_rec = self.encoder2(x22_)
+
+            loss_s += th.mean(th.abs(s11_ - s11_rec)) + \
+                th.mean(th.abs(s22_ - s22_rec))
+            loss_c += th.mean(th.abs(c11_rec - c1.detach())) + \
+                th.mean(th.abs(c22_rec - c2.detach()))
 
         x12 = self.decoder2(c1, s1_)
         x21 = self.decoder1(c2, s2_)
@@ -443,11 +455,11 @@ class MUNITGEN(nn.Module):
             return [x12, x21, x121, x212, x11, x22]
 
         # compute all the regularization
-        loss_rec = th.mean(th.abs(x11 - x1)) + th.mean(th.abs(x22 - x2))
-        loss_s = th.mean(th.abs(s12 - s1_)) + th.mean(th.abs(s21 - s2_))
-        loss_c = th.mean(th.abs(c12 - c1.detach())) + \
+        loss_rec += th.mean(th.abs(x11 - x1)) + th.mean(th.abs(x22 - x2))
+        loss_s += th.mean(th.abs(s12 - s1_)) + th.mean(th.abs(s21 - s2_))
+        loss_c += th.mean(th.abs(c12 - c1.detach())) + \
             th.mean(th.abs(c21 - c2.detach()))
-        loss_cyc = th.mean(th.abs(x121 - x1)) + th.mean(th.abs(x212 - x2))
+        loss_cyc += th.mean(th.abs(x121 - x1)) + th.mean(th.abs(x212 - x2))
         if self.my_loss:
             return [x12, x21, x11_, x22_], [loss_rec, loss_s, loss_c, loss_cyc]
         return [x12, x21], [loss_rec, loss_s, loss_c, loss_cyc]
