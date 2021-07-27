@@ -17,6 +17,7 @@ from scripts.callbacks import *
 # POTSDAM CARS
 generator_params = {"n_layers": 4,
                     "base_channels": 32,
+                    "my_loss": True,
                     "padding_mode": "reflect"}
 discriminator_params = {
     "n_res": 1,
@@ -37,7 +38,7 @@ interval = 25
 
 data_dir1 = "/scratch/s7hialtu/potsdam_cars_all"
 data_dir2 = "/scratch/s7hialtu/artificial_cars"
-results_dir = "/scratch/s7hialtu/munit_artificial2real"
+results_dir = "/scratch/s7hialtu/munit_artificial2real_my_loss"
 
 if not os.path.isdir(data_dir1):
     data_dir1 = "../potsdam_data/potsdam_cars_val"
