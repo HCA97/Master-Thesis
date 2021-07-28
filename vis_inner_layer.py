@@ -62,14 +62,14 @@ def plot_discriminator_steps(img, pl_module, save_dir):
     dis_inter_layers = []
     for i, layer in enumerate(pl_module.discriminator.conv_blocks):
         x = layer(x)
-        if layer.__class__.__name__ == "ConvBlock":
+        if layer.__class__.__name__ in ["ConvBlock", "AvgPool2d"]:
             # if not dis_inter_layers:
             #     x[:, :, 0, :] = 0
             #     x[:, :, :, 0] = 0
             dis_inter_layers.append(x.detach().clone().permute(1, 0, 2, 3))
 
-        if pl_module.discriminator.heat_map and pl_module.discriminator.heat_map_layer == i+1:
-            pred2 = pl_module.discriminator.patch(x).detach().cpu().numpy()
+        # if pl_module.discriminator.heat_map and pl_module.discriminator.heat_map_layer == i+1:
+        #     pred2 = pl_module.discriminator.patch(x).detach().cpu().numpy()
 
     x = x.reshape(1, -1)
     pred = pl_module.discriminator.l1(x).detach().cpu().numpy()
@@ -90,18 +90,18 @@ def plot_discriminator_steps(img, pl_module, save_dir):
         plt.clf()
         plt.close()
 
-    if pl_module.discriminator.heat_map:
-        plt.figure(figsize=(12, 8))
-        plt.title(f"Discriminator Final", fontsize=20)
-        colorbar = plt.imshow(np.squeeze(pred2), cmap="gray")
-        plt.colorbar(colorbar)
-        plt.tight_layout()
-        plt.axis("off")
-        plt.savefig(os.path.join(save_dir, f"disc_final_layer.png"))
+    # if pl_module.discriminator.heat_map:
+    #     plt.figure(figsize=(12, 8))
+    #     plt.title(f"Discriminator Final", fontsize=20)
+    #     colorbar = plt.imshow(np.squeeze(pred2), cmap="gray")
+    #     plt.colorbar(colorbar)
+    #     plt.tight_layout()
+    #     plt.axis("off")
+    #     plt.savefig(os.path.join(save_dir, f"disc_final_layer.png"))
 
-        # close everything, i don't know how important it is
-        plt.clf()
-        plt.close()
+    #     # close everything, i don't know how important it is
+    #     plt.clf()
+    #     plt.close()
 
     # Plot Input and Discriminator Prediction
     img_ = np.squeeze(img.detach().cpu().numpy()).transpose((1, 2, 0))
@@ -131,7 +131,7 @@ def plot_discriminator_steps_patch(img, pl_module, save_dir):
     x = img.detach().clone()
     for i, layer in enumerate(pl_module.discriminator.conv_blocks):
         x = layer(x)
-        if layer.__class__.__name__ == "ConvBlock":
+        if layer.__class__.__name__ in ["ConvBlock", "ResBlock"]:
             plot_layer_disc(x, i, save_dir)
 
     pred = pl_module.discriminator.l1(x).detach().cpu().numpy()
@@ -164,6 +164,25 @@ def plot_discriminator_steps_patch(img, pl_module, save_dir):
     # close everything, i don't know how important it is
     plt.clf()
     plt.close()
+
+
+@th.no_grad()
+def plot_discriminator_steps_basic_patch(img, pl_module, save_dir):
+
+    class A:
+        def __init__(self, disc):
+            self.discriminator = disc
+
+        def eval(self):
+            self.discriminator.eval()
+
+        def train(self):
+            self.discriminator.train()
+
+    plot_discriminator_steps_patch(
+        img, A(pl_module.discriminator.patch), os.path.join(save_dir, "patch"))
+    plot_discriminator_steps(
+        img,  A(pl_module.discriminator.basic), os.path.join(save_dir, "basic"))
 
 
 @ th.no_grad()
@@ -259,7 +278,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Show inner layers of DCGAN")
     parser.add_argument("save_dir", help="save directory path")
     parser.add_argument("checkpoint_dir", help="path to DCGAN checkpoint")
-    parser.add_argument("mode", default="dcgan", choices=["dcgan", "pix2pix"])
     parser.add_argument(
         "--data_dir", default="../potsdam_data/potsdam_cars", help="path to real cars directory")
     parser.add_argument("--artificial_dir",
@@ -272,7 +290,6 @@ if __name__ == "__main__":
     data_dir = args.data_dir
     artificial_dir = args.artificial_dir
     save_dir = args.save_dir
-    mode = args.mode
     n_samples = args.n_samples
 
     # load model
@@ -287,7 +304,7 @@ if __name__ == "__main__":
     for i in range(1, n_samples+1):
         real_img, fake_img_ = next(iter(potsdam.train_dataloader()))
 
-        if model.hparams.gen_model == "basic":
+        if model.hparams.gen_model in ["basic", "resnet"]:
             z = th.normal(0, 1, (1, model.generator.latent_dim),
                           device=model.device)
             fake_img = plot_generator_steps(
@@ -296,7 +313,7 @@ if __name__ == "__main__":
             fake_img = plot_generator_steps_u_net(
                 fake_img_, model, os.path.join(save_dir, str(i), "fake_img"))
 
-        if model.hparams.disc_model == "basic":
+        if model.hparams.disc_model in ["basic", "resnet"]:
             plot_discriminator_steps(
                 fake_img, model, os.path.join(save_dir, str(i), "fake_img"))
             plot_discriminator_steps(
@@ -305,4 +322,9 @@ if __name__ == "__main__":
             plot_discriminator_steps_patch(
                 fake_img, model, os.path.join(save_dir, str(i), "fake_img"))
             plot_discriminator_steps_patch(
+                real_img, model, os.path.join(save_dir, str(i), "real_img"))
+        elif model.hparams.disc_model == "basicpatch":
+            plot_discriminator_steps_basic_patch(
+                fake_img, model, os.path.join(save_dir, str(i), "fake_img"))
+            plot_discriminator_steps_basic_patch(
                 real_img, model, os.path.join(save_dir, str(i), "real_img"))

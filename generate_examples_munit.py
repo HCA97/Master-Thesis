@@ -26,6 +26,8 @@ if __name__ == "__main__":
                         type=int, help="number of fake images")
     parser.add_argument("--results_name", default="results",
                         help="results name")
+    parser.add_argument("--use_edges", action="store_true")
+    parser.set_defaults(use_edges=False)
     args = parser.parse_args()
 
     experiment_dir = args.experiment_dir
@@ -108,9 +110,19 @@ if __name__ == "__main__":
                                                             p=0.5),
                                                         transforms.RandomVerticalFlip(
                                                             p=0.5),
-                                                        #  transforms.ColorJitter(
-                                                         #     hue=[-0.1, 0.5]),
+                                                         transforms.ColorJitter(
+                                                            hue=[-0.1, 0.1]),
                                                          transforms.Normalize([0.5], [0.5])])
+                        if args.use_edges:
+                            transform2 = transforms.Compose([transforms.Resize(img_dim[1:]),
+                                                            Skeleton(
+                                                                1, 20, True),
+                                                            transforms.ToTensor(),
+                                                            transforms.RandomHorizontalFlip(
+                                                                p=0.5),
+                                                            transforms.RandomVerticalFlip(
+                                                                p=0.5),
+                                                             transforms.Normalize([0.5], [0.5])])
 
                         datasetmodule = PostdamCarsDataModule(potsdam_dir,
                                                               data_dir2=artificial_dir,

@@ -20,7 +20,7 @@ discriminator_params = {"base_channels": 64, "padding_mode": "reflect",
                         "n_layers": 4, "bn_mode": "default"}
 
 img_dim = (3, 32, 64)
-batch_size = 512
+batch_size = 256
 max_epochs = 1000
 interval = 25
 

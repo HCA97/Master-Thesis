@@ -2,7 +2,7 @@ import argparse
 import os
 
 import tqdm
-from torchvision.utils import make_grid
+from torchvision.utils import make_grid, save_image
 import cv2
 
 from sklearn.cluster import KMeans
@@ -87,6 +87,7 @@ plt.xticks([clusters[i]
 plt.yticks(fontsize=14)
 plt.ylabel("Davies Bouldin Score", fontsize=18)
 plt.xlabel("# of Clusters", fontsize=18)
+plt.tight_layout()
 plt.savefig(os.path.join(save_dir, "db_results.png"))
 plt.clf()
 plt.close()
@@ -99,15 +100,16 @@ for i in range(n_clusters):
     idx = np.random.choice(len(imgs), n_cars, replace=False)
     img = th.tensor(imgs[idx].transpose(0, 3, 1, 2))
     grid = make_grid(img, nrow=5, padding=2)
-    img = grid.numpy().transpose(1, 2, 0)
+    save_image(grid, os.path.join(save_dir, f"cluster_{i}.png"))
+    # img = grid.numpy().transpose(1, 2, 0)
 
-    plt.figure(figsize=(8, 8))
-    plt.imshow(img)
-    plt.xticks([])
-    plt.yticks([])
-    plt.savefig(os.path.join(save_dir, f"cluster_{i}.png"))
-    plt.clf()
-    plt.close()
+    # plt.figure(figsize=(8, 8))
+    # plt.imshow(img)
+    # plt.xticks([])
+    # plt.yticks([])
+    # plt.savefig(os.path.join(save_dir, f"cluster_{i}.png"))
+    # plt.clf()
+    # plt.close()
 
 # TSNE
 plt.figure(figsize=(8, 6))
@@ -117,6 +119,7 @@ for i in range(n_clusters):
 plt.xticks(fontsize=16)
 plt.yticks(fontsize=16)
 plt.title("TSNE Visualization", fontsize=18)
+plt.tight_layout()
 plt.savefig(os.path.join(save_dir, "tsne.png"))
 plt.clf()
 plt.close()

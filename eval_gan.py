@@ -29,13 +29,10 @@ if __name__ == "__main__":
                         help="skip fid of training dataset", dest="skip_train_fid")
     parser.add_argument("--data_aug", type=int, default=0,
                         help="data augmentation types")
-    parser.add_argument("--ppl", dest="ppl",
-                        action="store_true", help="compute ppl")
     parser.add_argument("--width", type=int, default=64, help="image width")
     parser.add_argument("--height", type=int, default=32, help="image height")
     parser.add_argument("--skip_val", action="store_true", dest="skip_val")
     parser.set_defaults(skip_train_fid=False)
-    parser.set_defaults(ppl=False)
     parser.set_defaults(skip_val=False)
     args = parser.parse_args()
 
@@ -163,9 +160,6 @@ if __name__ == "__main__":
                 else:
                     print(
                         f"[FAKE] Epoch {checkpoint}: Train FID is {fid_train[-1]}.")
-                # # ppl score
-                # if args.ppl:
-                #     ppl_train.append(perceptual_path_length(generator))
 
             np.save(numpy_file, {"epochs": checkpoints,
                     "fid_train": fid_train, "fid_val": fid_val})

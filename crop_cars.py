@@ -160,7 +160,7 @@ def return_artificial_cars(json_file, buffer=5):
     return cars_succeed, cars_failed
 
 
-def return_potsdam_cars(data_path, buffer=5, min_height=20, area_threshold=0.9, ratio_threshold=2):
+def return_potsdam_cars(data_path, buffer=5, min_height=20, area_threshold=0.9, ratio_threshold=2, return_mask=False):
     #test1 = "top_potsdam_2_10_RGB.tif"
     #test2 = "top_potsdam_2_10_label.tif"
     #test3 = "top_potsdam_2_10_annos.json"
@@ -201,7 +201,11 @@ def return_potsdam_cars(data_path, buffer=5, min_height=20, area_threshold=0.9, 
 
         for coord in coords:
             try:
-                car_original, car_aligned = crop_car(img, coord, buffer)
+                mask_ = 255*np.concatenate((np.expand_dims(mask, axis=2), np.expand_dims(
+                    mask, axis=2), np.expand_dims(mask, axis=2)), axis=2).astype(np.uint8)
+                # print(mask_.shape)
+                car_original, car_aligned = crop_car(
+                    mask_ if return_mask else img, coord, buffer)
 
                 x_min, x_max, y_min, y_max = get_bbox(
                     coord, 5, mask.shape)
@@ -259,6 +263,9 @@ if __name__ == "__main__":
         "--save_path", default="../potsdam_data/potsdam_cars", help="where to save")
     parser.add_argument(
         "--data_path", default="../potsdam_data/training", help="Potsdam data path")
+    parser.add_argument("--return_mask", action="store_true",
+                        help="Return Segmentation Masks")
+    parser.set_defaults(return_mask=False)
     parser.set_defaults(crop_artificial_cars=False)
     args = parser.parse_args()
 
@@ -271,7 +278,7 @@ if __name__ == "__main__":
     ratio_threshold = 1.8
 
     potsdam_cars_succeed, potsdam_cars_failed = return_potsdam_cars(
-        data_path, min_height=min_height, ratio_threshold=ratio_threshold)
+        data_path, min_height=min_height, ratio_threshold=ratio_threshold, return_mask=args.return_mask)
 
     # succeed cars
     if potsdam_cars_succeed:

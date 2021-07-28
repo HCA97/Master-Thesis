@@ -34,7 +34,7 @@ for checkpoint in checkpoints:
         generator = model.generator_avg if model.hparams.moving_average else model.generator
 
         ppl = perceptual_path_length(
-            generator, device=model.device, batch_size=128)
+            generator, n_samples=1024*5, net="vgg", device=model.device, batch_size=128)
         print(f"Epoch {checkpoint} - PPL {ppl}")
 
         ppls.append(ppl)
