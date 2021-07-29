@@ -393,11 +393,11 @@ def fid_score(imgs1: th.Tensor,
         act2 = np.squeeze(vgg16_get_activation_maps(
             imgs2[:n_cases], layer_idx, device, normalize_range, use_bn=use_bn).numpy())
     else:
-        act1 = imgs1
+        act1 = imgs1[:n_cases]
         if type(imgs1) == th.Tensor:
             act1 = np.squeeze(imgs1[:n_cases].detach().cpu().numpy())
 
-        act2 = imgs2
+        act2 = imgs2[:n_cases]
         if type(imgs2) == th.Tensor:
             act2 = np.squeeze(imgs2[:n_cases].detach().cpu().numpy())
 
