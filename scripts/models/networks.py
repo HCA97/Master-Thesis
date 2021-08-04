@@ -44,11 +44,11 @@ class EncoderLatent(nn.Module):
 
         output_width, output_height = img_dim[1], img_dim[2]
         for i in range(n_layers):
-            output_width = math.ceil((output_width - 2 + 2*padding) / 2)
-            output_height = math.ceil((output_height - 2 + 2*padding) / 2)
+            output_width = math.ceil(output_width / 2)
+            output_height = math.ceil(output_height / 2)
         ds_size = output_width * output_height
         self.l1 = nn.Linear(ds_size*base_channels * 2 **
-                            (n_layers+1), self.generator.latent_dim)
+                            (n_layers), self.generator.latent_dim)
 
     def forward(self, img):
         img = self.conv_blocks(img)
@@ -58,9 +58,31 @@ class EncoderLatent(nn.Module):
         return z, img_rec
 
 
+class PCAGenerator(nn.Module):
+    def __init__(self, generator: nn.Module, E: th.tensor, mu: th.tensor):
+        super().__init__()
+
+        self.generator = generator
+        for param in self.generator.parameters():
+            param.requires_grad = False
+
+        self.latent_dim = len(E)
+        self.E = nn.Parameter(E, requires_grad=False)
+        self.mu = nn.Parameter(mu, requires_grad=False)
+
+    def forward(self, z):
+        l1 = z.matmul(self.E) + self.mu
+        l1 = l1.view(1 if len(z) == self.latent_dim else len(z),
+                     self.generator.init_channels,
+                     self.generator.init_height,
+                     self.generator.init_width)
+        img = self.generator.conv_blocks(l1)
+        return img
+
 # -------------------------------------------------------- #
 #                   Discriminators                         #
 # -------------------------------------------------------- #
+
 
 class MultiDiscriminator(nn.Module):
 
