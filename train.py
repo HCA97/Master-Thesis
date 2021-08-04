@@ -17,7 +17,6 @@ from scripts.callbacks import *
 # POTSDAM CARS
 generator_params = {"n_layers": 4,
                     "base_channels": 32,
-                    "my_loss": True,
                     "padding_mode": "reflect"}
 discriminator_params = {
     "n_res": 1,
@@ -38,7 +37,7 @@ interval = 25
 
 data_dir1 = "/scratch/s7hialtu/potsdam_cars_all"
 data_dir2 = "/scratch/s7hialtu/artificial_cars"
-results_dir = "/scratch/s7hialtu/munit_artificial2real_my_loss"
+results_dir = "/scratch/s7hialtu/munit_artificial2real_dynamic_padding"
 
 if not os.path.isdir(data_dir1):
     data_dir1 = "../potsdam_data/potsdam_cars_val"
@@ -52,11 +51,14 @@ transform1 = transforms.Compose([transforms.Resize(img_dim[1:]),
                                 transforms.RandomVerticalFlip(p=0.5),
                                 transforms.ColorJitter(hue=[-0.1, 0.1]),
                                 transforms.Normalize([0.5], [0.5])])
-transform2 = transforms.Compose([transforms.Resize(img_dim[1:]),
-                                 transforms.ToTensor(),
-                                 transforms.RandomHorizontalFlip(p=0.5),
-                                 transforms.RandomVerticalFlip(p=0.5),
-                                 transforms.Normalize([0.5], [0.5])])
+transform2 = transforms.Compose([transforms.ToTensor(),
+                                transforms.RandomHorizontalFlip(p=0.5),
+                                transforms.RandomVerticalFlip(p=0.5),
+                                DynamicPad(min_img_dim=(130, 70)),
+                                transforms.RandomCrop(
+                                    (60, 120), padding_mode="reflect"),
+                                transforms.Resize(img_dim[1:]),
+                                transforms.Normalize([0.5], [0.5])])
 
 
 model = MUNIT(img_dim,
