@@ -49,6 +49,23 @@ def sim_gan_initial_start(dataloader, generator, discriminator, img_dim=(3, 32, 
     return gen, disc
 
 
+class DynamicPad(th.nn.Module):
+    def __init__(self, min_img_dim=(120, 60)):
+        super().__init__()
+        self.min_img_dim = min_img_dim
+
+    def forward(self, img):
+        if type(img) == PIL.Image.Image:
+            img_dim = img.size
+        else:
+            img_dim = (img.shape[2], img.shape[1])
+
+        padding = [0 if b - a < 0 else math.ceil((b - a)/2)
+                   for a, b in zip(img_dim, self.min_img_dim)]
+        transform = torchvision.transforms.Pad(padding, padding_mode='edge')
+        return transform(img)
+
+
 class Skeleton(th.nn.Module):
     def __init__(self, ratio=0.9, min_length=10, smooth=False, canny=True):
         super().__init__()
