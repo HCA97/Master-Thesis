@@ -49,10 +49,29 @@ def sim_gan_initial_start(dataloader, generator, discriminator, img_dim=(3, 32, 
     return gen, disc
 
 
+class AddNoise(th.nn.Module):
+    def __init__(self, alpha=0.1, normalize_range=(-1, 1)):
+        super().__init__()
+        self.alpha = alpha
+        self.min, self.max = normalize_range
+
+    def forward(self, img):
+        if type(img) != th.Tensor:
+            raise RuntimeError("It must be torch tensor not pil image")
+
+        noise = th.normal(0, 1, size=img.shape, device=img.device)
+        noise = (noise - noise.min()) / (noise.max() - noise.min())
+        noise = ((self.max - self.min) * noise) - ((self.max - self.min) / 2)
+        img = (1 - self.alpha) * img + self.alpha * noise
+        return img
+
+
 class DynamicPad(th.nn.Module):
-    def __init__(self, min_img_dim=(120, 60)):
+    def __init__(self, min_img_dim=(120, 60), padding_mode="edge", padding_value=255):
         super().__init__()
         self.min_img_dim = min_img_dim
+        self.padding_mode = padding_mode
+        self.padding_value = padding_value if padding_mode == "constant" else 0
 
     def forward(self, img):
         if type(img) == PIL.Image.Image:
@@ -62,7 +81,8 @@ class DynamicPad(th.nn.Module):
 
         padding = [0 if b - a < 0 else math.ceil((b - a)/2)
                    for a, b in zip(img_dim, self.min_img_dim)]
-        transform = torchvision.transforms.Pad(padding, padding_mode='edge')
+        transform = torchvision.transforms.Pad(
+            padding, padding_mode=self.padding_mode, fill=self.padding_value)
         return transform(img)
 
 

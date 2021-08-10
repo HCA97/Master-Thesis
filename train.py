@@ -36,29 +36,39 @@ max_epochs = 500
 interval = 25
 
 data_dir1 = "/scratch/s7hialtu/potsdam_cars_all"
-data_dir2 = "/scratch/s7hialtu/artificial_cars"
-results_dir = "/scratch/s7hialtu/munit_artificial2real_dynamic_padding"
+data_dir2 = "/scratch/s7hialtu/training_tightcanvas_graybackground"
+results_dir = "/scratch/s7hialtu/munit_artificial2real_graybackground_dynamic_padding_noise"
 
 if not os.path.isdir(data_dir1):
-    data_dir1 = "../potsdam_data/potsdam_cars_val"
-    data_dir2 = "../potsdam_data/artifical_cars_small"
+    data_dir1 = "../potsdam_data/potsdam_cars_all"
+    data_dir2 = "../potsdam_data/cem-v0/v2/training_tightcanvas_graybackground"
     results_dir = "logs"
 
 # DATA AUG FOR
-transform1 = transforms.Compose([transforms.Resize(img_dim[1:]),
-                                transforms.ToTensor(),
-                                transforms.RandomHorizontalFlip(p=0.5),
-                                transforms.RandomVerticalFlip(p=0.5),
-                                transforms.ColorJitter(hue=[-0.1, 0.1]),
-                                transforms.Normalize([0.5], [0.5])])
-transform2 = transforms.Compose([transforms.ToTensor(),
-                                transforms.RandomHorizontalFlip(p=0.5),
-                                transforms.RandomVerticalFlip(p=0.5),
-                                DynamicPad(min_img_dim=(130, 70)),
-                                transforms.RandomCrop(
-                                    (60, 120), padding_mode="reflect"),
-                                transforms.Resize(img_dim[1:]),
-                                transforms.Normalize([0.5], [0.5])])
+transform1 = transforms.Compose([transforms.ColorJitter(hue=[-0.1, 0.1]),
+                                 DynamicPad(min_img_dim=(110, 60),
+                                            padding_mode="edge"),
+                                 transforms.RandomCrop(
+                                     (55, 105), padding_mode="reflect"),
+                                 transforms.Resize((32, 64)),
+                                 transforms.RandomHorizontalFlip(p=0.5),
+                                 transforms.RandomVerticalFlip(p=0.5),
+                                 transforms.ToTensor(),
+                                 transforms.Normalize([0.5], [0.5])])
+
+transform2 = transforms.Compose([transforms.ColorJitter(hue=[-0.1, 0.1]),
+                                 DynamicPad(min_img_dim=(130, 70),
+                                            padding_mode="constant", padding_value=125),
+                                 transforms.RandomRotation(
+                                     degrees=5, resample=PIL.Image.NEAREST, fill=125),
+                                 transforms.RandomCrop(
+                                     (60, 120), padding_mode="reflect"),
+                                 transforms.Resize((32, 64)),
+                                 transforms.RandomHorizontalFlip(p=0.5),
+                                 transforms.RandomVerticalFlip(p=0.5),
+                                 transforms.ToTensor(),
+                                 transforms.Normalize([0.5], [0.5]),
+                                 AddNoise(alpha=0.07)])
 
 
 model = MUNIT(img_dim,
