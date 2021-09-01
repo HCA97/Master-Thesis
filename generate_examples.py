@@ -16,7 +16,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         "Generate samples from each epoch for DCGAN and PIX2PIX")
     parser.add_argument("experiment_dir", help="experiment folder")
-    parser.add_argument("mode", choices=["dcgan", "pix2pix"])
     parser.add_argument(
         "--artificial_dir", default="../potsdam_data/artificial_cars", help="path to artificial cars")
     parser.add_argument("--interval", default=25, type=int,
@@ -30,7 +29,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     experiment_dir = args.experiment_dir
-    mode = args.mode
     artificial_dir = args.artificial_dir
     n_samples = args.n_samples
     interval = args.interval
@@ -45,8 +43,7 @@ if __name__ == "__main__":
     bs = 256
 
     # for interpolation between points
-    if mode == "dcgan":
-        interpolate = LatentDimInterpolator(num_samples=10, steps=step)
+    interpolate = LatentDimInterpolator(num_samples=10, steps=step)
 
     # checkpoints
     checkpoints = [
@@ -71,6 +68,12 @@ if __name__ == "__main__":
                     model = GAN.load_from_checkpoint(path)
                     model.eval()
                     model.cuda()
+
+                    mode = None
+                    if model.hparams.gen_model in ["unet", "refiner"]:
+                        mode = "pix2pix"
+                    elif model.hparams.gen_model in ["basic", "resnet"]:
+                        mode = "dcgan"
 
                     # paths
                     img_folder = os.path.join(
