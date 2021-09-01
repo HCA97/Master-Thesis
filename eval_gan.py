@@ -79,6 +79,18 @@ if __name__ == "__main__":
                             transforms.ColorJitter(
                                 hue=hue, brightness=brightness, contrast=contrast),
                             transforms.Normalize([0.5], [0.5])]),
+        transforms.Compose([transforms.ColorJitter(hue=[-0.1, 0.1]),
+                            DynamicPad(min_img_dim=(110, 60),
+                                       padding_mode="edge"),
+                            transforms.RandomCrop(
+                                (55, 105), padding_mode="reflect"),
+                            transforms.Resize(img_dim),
+                            transforms.RandomHorizontalFlip(
+            p=0.5),
+            transforms.RandomVerticalFlip(
+            p=0.5),
+            transforms.ToTensor(),
+            transforms.Normalize([0.5], [0.5])])
     ]
 
     # checkpoints
@@ -88,6 +100,7 @@ if __name__ == "__main__":
     # data loaders
     dataset = ImageFolder(args.potsdam_train_dir, root2=args.potsdam_val_dir,
                           transform2=data_augs[2 if args.data_aug <= 2 else args.data_aug], transform=data_augs[args.data_aug])
+
     potsdam_cars_dataloader = DataLoader(
         dataset, batch_size=fid_samples, shuffle=True, num_workers=4)
 
