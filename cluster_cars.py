@@ -8,6 +8,7 @@ import cv2
 from sklearn.cluster import KMeans
 from sklearn.metrics import davies_bouldin_score
 from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -15,20 +16,23 @@ from scripts import *
 
 parser = argparse.ArgumentParser("Cluster cars using VGG-16 features")
 parser.add_argument(
-    "--potsdam_dir", default="../potsdam_data/potsdam_cars", help="potsdam cars path")
+    "--potsdam_dir", default="../potsdam_data/potsdam_cars_all", help="potsdam cars path")
 parser.add_argument(
     "--save_dir", default="experiments/cluster_cars", help="save path")
 parser.add_argument("--n_cars", default=30,
                     help="number of cars per cluster to plot")
 parser.add_argument("--resample", action="store_true", dest="resample",
                     help="resample dataset according to cluster size or not.")
+parser.add_argument("--use_pca", action="store_true")
 parser.set_defaults(resample=False)
+parser.set_defaults(use_pca=False)
 args = parser.parse_args()
 
 potsdam_dir = args.potsdam_dir
 save_dir = args.save_dir
 n_cars = args.n_cars
 resample = args.resample
+use_pca = args.use_pca
 
 numpy_path = os.path.join(save_dir, "visualization.npy")
 
@@ -44,14 +48,18 @@ if not os.path.exists(numpy_path):
     cars = []
     for imgs, _ in tqdm.tqdm(dataloader, desc="Featrues"):
 
-        act = vgg16_get_activation_maps(
-            imgs, layer_idx=33, device="cuda:0", normalize_range=(-1, 1), use_bn=True)
-
         cars.append(imgs.detach().cpu().numpy().transpose(0, 2, 3, 1))
-        feat.append(np.squeeze(act.detach().cpu().numpy()))
 
-    feat = np.concatenate(feat, axis=0)  # feats
+        if not use_pca:
+            act = vgg16_get_activation_maps(
+                imgs, layer_idx=33, device="cuda:0", normalize_range=(-1, 1), use_bn=True)
+            feat.append(np.squeeze(act.detach().cpu().numpy()))
+
     cars = (np.concatenate(cars, axis=0) + 1) / 2  # cars
+    if not use_pca:
+        feat = np.concatenate(feat, axis=0)  # feats
+    else:
+        feat = PCA(n_components=100).fit_transform(cars.reshape(len(cars), -1))
     feat_2 = TSNE(n_components=2).fit_transform(feat)  # tsne
 
     # davies bouldin score
@@ -78,13 +86,16 @@ else:
     feat_2, feat, cars = save_dict["tsne"], save_dict["feat"], save_dict["cars"]
     labels, db_score, clusters = save_dict["labels"], save_dict["db_score"], save_dict["clusters"]
 
+n_clusters = int(np.max(labels))+1
+
 # DB SCORE
-plt.figure(figsize=(7, 4))
+plt.figure(figsize=(8, 6))
 plt.plot(clusters, db_score, marker="*")
 plt.title("Clustering Score", fontsize=20)
 plt.xticks([clusters[i]
             for i in range(0, len(clusters)+1, 2)], fontsize=14)
-plt.yticks(fontsize=14)
+plt.xticks(fontsize=16)
+plt.yticks(fontsize=16)
 plt.ylabel("Davies Bouldin Score", fontsize=18)
 plt.xlabel("# of Clusters", fontsize=18)
 plt.tight_layout()
@@ -92,37 +103,30 @@ plt.savefig(os.path.join(save_dir, "db_results.png"))
 plt.clf()
 plt.close()
 
-# CLUSTERS
-n_clusters = int(np.max(labels))+1
-for i in range(n_clusters):
-    imgs = cars[labels == i]
-
-    idx = np.random.choice(len(imgs), n_cars, replace=False)
-    img = th.tensor(imgs[idx].transpose(0, 3, 1, 2))
-    grid = make_grid(img, nrow=5, padding=2)
-    save_image(grid, os.path.join(save_dir, f"cluster_{i}.png"))
-    # img = grid.numpy().transpose(1, 2, 0)
-
-    # plt.figure(figsize=(8, 8))
-    # plt.imshow(img)
-    # plt.xticks([])
-    # plt.yticks([])
-    # plt.savefig(os.path.join(save_dir, f"cluster_{i}.png"))
-    # plt.clf()
-    # plt.close()
-
 # TSNE
 plt.figure(figsize=(8, 6))
 for i in range(n_clusters):
     plt.plot(feat_2[labels == i, 0],
-             feat_2[labels == i, 1], ".")
+             feat_2[labels == i, 1], ".", label=f"Cluster {i+1}")
 plt.xticks(fontsize=16)
 plt.yticks(fontsize=16)
-plt.title("TSNE Visualization", fontsize=18)
+plt.legend(prop={'size': 14})
+plt.title("TSN-E Visualization", fontsize=18)
 plt.tight_layout()
 plt.savefig(os.path.join(save_dir, "tsne.png"))
 plt.clf()
 plt.close()
+
+
+# CLUSTERS
+for i in range(n_clusters):
+    imgs = cars[labels == i][:, :, :, [0, 1, 2]]
+
+    idx = np.random.choice(len(imgs), n_cars, replace=False)
+    img = th.tensor(imgs[idx].transpose(0, 3, 1, 2))
+    grid = make_grid(img[:, :, :, :], nrow=10, padding=2, pad_value=1)
+    save_image(grid, os.path.join(save_dir, f"cluster_{i}.png"))
+
 
 # RESAMPLE
 if resample:
