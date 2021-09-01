@@ -15,11 +15,15 @@ def load_images_cv(path, filter_car=False):
     if ret is None:
         raise RuntimeError(f"{path} is not exists.")
 
-    ret = cv2.cvtColor(ret, cv2.COLOR_BGR2RGB)
+    # ret = cv2.cvtColor(ret, cv2.COLOR_BGR2RGB)
     if filter_car:
-        r = ret[:, :, 0] == 255
-        b = ret[:, :, 1] == 255
-        g = ret[:, :, 2] == 0
+        # r = ret[:, :, 0] == 255
+        # g = ret[:, :, 1] == 255
+        # b = ret[:, :, 2] == 0
+
+        b = ret[:, :, 0] == 0
+        g = ret[:, :, 1] == 255
+        r = ret[:, :, 2] == 255
         ret = r * b * g
 
     return ret
