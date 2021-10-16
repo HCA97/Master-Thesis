@@ -14,10 +14,10 @@ from scripts.callbacks import *
 
 # POTSDAM CARS
 generator_params = {"n_layers": 4, "init_channels": 512, "learn_upsample": False,
-                    "bn_mode": "default", "use_spectral": True}
+                    "bn_mode": "default", "use_spectral_norm": True}
 
 discriminator_params = {"base_channels": 32, "n_layers": 4,
-                        "bn_mode": "default", "use_spectral": True}
+                        "bn_mode": "default", "use_spectral_norm": True}
 
 training_params = [{"one_sided_label_smoothing": True},
                    {"learning_rate_disc": 0.0004, "learning_rate_gen": 0.0001},

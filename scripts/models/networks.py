@@ -18,7 +18,7 @@ class L2Norm(nn.Module):
         return th.mean((x1 - x2)**2)
 
 # ------------------------------------------------------- #
-#           GAN INVERSION                                 #
+#           Miscellaneous                                 #
 # ------------------------------------------------------- #
 
 
@@ -665,123 +665,6 @@ class MUNITEncoder(nn.Module):
         s = s.view(x.shape[0], -1)
         s = self.style_enc_l1(s)
         return c, s
-
-
-class RefinerNet(nn.Module):
-    def __init__(self,
-                 n_channels=3,
-                 init_channels=128,
-                 n_layers=4,
-                 act="relu",
-                 bn_mode="old",
-                 reconstruct=False,
-                 use_spectral_norm=False,
-                 inject_noise=False,
-                 padding_mode="zeros",
-                 **kwargs):
-        super().__init__()
-
-        self.reconstruct = reconstruct
-
-        layers = [ResBlock(n_channels, init_channels, inject_noise=inject_noise, padding_mode=padding_mode,
-                           act=act, bn_mode=bn_mode, use_spectral_norm=use_spectral_norm)]
-        for _ in range(n_layers-1):
-            layers.append(
-                ResBlock(init_channels, init_channels, inject_noise=inject_noise, padding_mode=padding_mode,
-                         act=act, bn_mode=bn_mode, use_spectral_norm=use_spectral_norm))
-
-        self.conv_blocks = nn.Sequential(*layers)
-        self.final = ConvBlock(
-            init_channels, n_channels, use_bn=False, act="tanh", padding_mode=padding_mode)
-
-    def forward(self, x_in):
-
-        x = self.conv_blocks(x_in)
-        x = self.final(x)
-
-        if self.reconstruct:
-            return x
-        return x_in + x
-
-
-class UnetGenerator(nn.Module):
-
-    def __init__(self,
-                 n_channels=3,
-                 init_channels=64,
-                 n_layers=4,
-                 n_blocks=2,
-                 act="relu",
-                 bn_mode="old",
-                 reconstruct=False,
-                 use_spectral_norm=False,
-                 inject_noise=False,
-                 use_bn_first_conv=True,
-                 padding_mode="zeros",
-                 **kwargs):
-        super().__init__()
-
-        if n_layers < 2:
-            raise AttributeError("Number of layers must be larger than 1.")
-
-        self.reconstruct = reconstruct
-
-        # down part
-        self.down = nn.ModuleList()
-        self.down.append(
-            ConvBlock(n_channels, init_channels,
-                      n_blocks=n_blocks, bn_mode=bn_mode, act=act, use_bn=use_bn_first_conv,
-                      use_spectral_norm=use_spectral_norm, padding_mode=padding_mode))
-        for i in range(1, n_layers-1):
-            self.down.append(
-                ConvBlock(2**(i-1) * init_channels, 2**i * init_channels,
-                          n_blocks=n_blocks, act=act, bn_mode=bn_mode,
-                          use_spectral_norm=use_spectral_norm, padding_mode=padding_mode))
-
-        # bottleneck
-        self.bottle_neck = ConvBlock(
-            2**(n_layers-2) * init_channels, 2**(n_layers-1) * init_channels,
-            n_blocks=n_blocks, act=act, bn_mode=bn_mode,
-            use_spectral_norm=use_spectral_norm, inject_noise=inject_noise, padding_mode=padding_mode)
-
-        # up part
-        self.up = nn.ModuleList()
-        for i in range(n_layers-1, 0, -1):
-            block = nn.Sequential(
-                ConvBlock((2**(i - 1) + 2**i)*init_channels,
-                          2**(i-1) * init_channels, kernel_size=1, act=act, padding_mode=padding_mode,
-                          bn_mode=bn_mode, use_spectral_norm=use_spectral_norm),
-                ConvBlock(2**(i-1) * init_channels, 2**(i-1)
-                          * init_channels, n_blocks=n_blocks, inject_noise=inject_noise, padding_mode=padding_mode,
-                          act=act, bn_mode=bn_mode, use_spectral_norm=use_spectral_norm)
-            )
-            self.up.append(block)
-
-        self.final = ConvBlock(
-            init_channels, n_channels, use_bn=False, act="tanh", bn_mode=bn_mode, padding_mode=padding_mode)
-
-    def forward(self, x_in):
-
-        x = self.down[0](x_in)
-        hidden_layers = [x]
-        x = F.max_pool2d(x, kernel_size=2, stride=2)
-
-        for layer in self.down[1:]:
-            x = layer(x)
-            hidden_layers.append(x)
-            x = F.max_pool2d(x, kernel_size=2, stride=2)
-
-        x = self.bottle_neck(x)
-
-        for i, layer in enumerate(self.up):
-            x = F.interpolate(x, scale_factor=2)
-            x = th.cat([x, hidden_layers[-i-1]], axis=1)
-            x = layer(x)
-
-        x = self.final(x)
-        if self.reconstruct:
-            return x
-        return x_in + x
 
 
 class ResNetGenerator(nn.Module):

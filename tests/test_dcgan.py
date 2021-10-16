@@ -11,11 +11,12 @@ from scripts.dataloader import *
 from scripts.callbacks import *
 
 # POTSDAM CARS
-generator_params = {"n_layers": 4, "init_channels": 64}
-discriminator_params = {"base_channels": 32, "n_layers": 4, "heat_map": True}
+generator_params = {"n_layers": 5, "init_channels": 1024}
+discriminator_params = {"base_channels": 32,
+                        "n_layers": 5, "heat_map_layer": 2, "heat_map": True}
 
 img_dim = (3, 64, 128)
-batch_size = 16
+batch_size = 124
 max_epochs = 5
 
 
@@ -26,17 +27,17 @@ if not os.path.isdir(data_dir):
     data_dir = "../potsdam_data/potsdam_cars"
     results_dir = "logs"
 
-model = GAN(img_dim, discriminator_params=discriminator_params, fid_interval=1, use_lpips=False, use_buffer=True,
-            generator_params=generator_params, gen_model="unet", use_lr_scheduler=True)
+model = GAN(img_dim, discriminator_params=discriminator_params, fid_interval=1, use_buffer=True,
+            generator_params=generator_params, gen_model="basic", use_lr_scheduler=True, use_symmetry_loss=True)
 
 potsdam = PostdamCarsDataModule(
     data_dir, data_dir2=data_dir, img_size=img_dim[1:], batch_size=batch_size)
 potsdam.setup()
 
 callbacks = [
-    # TensorboardGeneratorSampler(
-    #     epoch_interval=1, num_samples=batch_size, normalize=True),
-    # LatentDimInterpolator(interpolate_epoch_interval=1, num_samples=10),
+    TensorboardGeneratorSampler(
+        epoch_interval=1, num_samples=batch_size, normalize=True),
+    LatentDimInterpolator(interpolate_epoch_interval=1, num_samples=10),
     ModelCheckpoint(period=1, save_top_k=-1, filename="{epoch}"),
     EarlyStopping(monitor="fid", patience=5, mode="min"),
     Pix2PixCallback(),

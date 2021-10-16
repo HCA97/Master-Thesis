@@ -11,15 +11,17 @@ from scripts.models import *
 from scripts.dataloader import *
 
 NUM_ROWS = {1024: 64, 512: 32, 256: 16, 128: 16, 64: 8, 32: 8, 16: 4}
+FIG_DIM = {1024: (12, 6), 512: (12, 6), 256: (
+    12, 8), 128: (12, 6), 64: (12, 8), 32: (12, 6), 16: (12, 6)}
 
 
 def plot_layer_disc(out, layer_i, save_dir):
     out = out.detach().cpu().clone().permute(1, 0, 2, 3)
     grid = torchvision.utils.make_grid(
-        out, nrow=NUM_ROWS[out.shape[0]], padding=1, normalize=True).numpy().transpose((1, 2, 0))
+        out, nrow=NUM_ROWS[out.shape[0]], padding=1, normalize=True, pad_value=1).numpy().transpose((1, 2, 0))
 
-    plt.figure(figsize=(12, 8))
-    plt.title(f"Discriminator Layer {layer_i+1}", fontsize=20)
+    plt.figure(figsize=FIG_DIM[out.shape[0]])
+    # plt.title(f"Discriminator Layer {layer_i+1}", fontsize=20)
     plt.imshow(grid)
     plt.tight_layout()
     plt.axis("off")
@@ -30,19 +32,18 @@ def plot_layer_disc(out, layer_i, save_dir):
     plt.close()
 
 
-def plot_layer_gen(out, layer_i, save_dir):
+def plot_layer(out, layer_i, save_dir, which_one):
     out = out.detach().cpu().clone().permute(1, 0, 2, 3)
     grid = torchvision.utils.make_grid(
-        out, nrow=NUM_ROWS[out.shape[0]], padding=1, normalize=True).numpy().transpose((1, 2, 0))
+        out, nrow=NUM_ROWS[out.shape[0]], padding=1, normalize=True, pad_value=1).numpy().transpose((1, 2, 0))
 
-    plt.figure(figsize=(12, 8))
-    plt.title(f"Generator Layer {layer_i+1}", fontsize=20)
+    plt.figure(figsize=FIG_DIM[out.shape[0]])
     plt.imshow(grid)
     plt.tight_layout()
     plt.axis("off")
-    plt.savefig(os.path.join(save_dir, f"gen_layer{layer_i+1}.png"))
+    plt.savefig(os.path.join(save_dir, f"{which_one}_layer{layer_i+1}.png"))
 
-    # close everything, i don't know how important it is
+    # # close everything, i don't know how important it is
     plt.clf()
     plt.close()
 
@@ -63,45 +64,10 @@ def plot_discriminator_steps(img, pl_module, save_dir):
     for i, layer in enumerate(pl_module.discriminator.conv_blocks):
         x = layer(x)
         if layer.__class__.__name__ in ["ConvBlock", "AvgPool2d"]:
-            # if not dis_inter_layers:
-            #     x[:, :, 0, :] = 0
-            #     x[:, :, :, 0] = 0
-            dis_inter_layers.append(x.detach().clone().permute(1, 0, 2, 3))
-
-        # if pl_module.discriminator.heat_map and pl_module.discriminator.heat_map_layer == i+1:
-        #     pred2 = pl_module.discriminator.patch(x).detach().cpu().numpy()
+            plot_layer(x, i, save_dir, "disc")
 
     x = x.reshape(1, -1)
     pred = pl_module.discriminator.l1(x).detach().cpu().numpy()
-
-    # Plot Inner Layers
-    for i, out in enumerate(dis_inter_layers):
-        grid = torchvision.utils.make_grid(
-            out, nrow=NUM_ROWS[out.shape[0]], padding=1, normalize=True).numpy().transpose((1, 2, 0))
-
-        plt.figure(figsize=(12, 8))
-        plt.title(f"Discriminator Layer {i+1}", fontsize=20)
-        plt.imshow(grid)
-        plt.tight_layout()
-        plt.axis("off")
-        plt.savefig(os.path.join(save_dir, f"disc_layer_{i+1}.png"))
-
-        # close everything, i don't know how important it is
-        plt.clf()
-        plt.close()
-
-    # if pl_module.discriminator.heat_map:
-    #     plt.figure(figsize=(12, 8))
-    #     plt.title(f"Discriminator Final", fontsize=20)
-    #     colorbar = plt.imshow(np.squeeze(pred2), cmap="gray")
-    #     plt.colorbar(colorbar)
-    #     plt.tight_layout()
-    #     plt.axis("off")
-    #     plt.savefig(os.path.join(save_dir, f"disc_final_layer.png"))
-
-    #     # close everything, i don't know how important it is
-    #     plt.clf()
-    #     plt.close()
 
     # Plot Input and Discriminator Prediction
     img_ = np.squeeze(img.detach().cpu().numpy()).transpose((1, 2, 0))
@@ -132,7 +98,7 @@ def plot_discriminator_steps_patch(img, pl_module, save_dir):
     for i, layer in enumerate(pl_module.discriminator.conv_blocks):
         x = layer(x)
         if layer.__class__.__name__ in ["ConvBlock", "ResBlock"]:
-            plot_layer_disc(x, i, save_dir)
+            plot_layer(x, i, save_dir, "disc")
 
     pred = pl_module.discriminator.l1(x).detach().cpu().numpy()
 
@@ -186,53 +152,6 @@ def plot_discriminator_steps_basic_patch(img, pl_module, save_dir):
 
 
 @ th.no_grad()
-def plot_generator_steps_u_net(img, pl_module, save_dir):
-
-    pl_module.eval()
-
-    os.makedirs(save_dir, exist_ok=True)
-
-    u_net = pl_module.generator
-    layer_i = 0
-    down = nn.MaxPool2d(2, 2)
-    up = nn.Upsample(scale_factor=2)
-
-    x = u_net.down[0](img)
-    plot_layer_gen(x, layer_i, save_dir)
-    hidden_layers = [x.detach().clone()]
-    x = down(x)
-    for layer in u_net.down[1:]:
-        x = layer(x)
-        # store it for upsample pat
-        hidden_layers.append(x.detach().clone())
-        # plot layer
-        layer_i += 1
-        plot_layer_gen(x, layer_i, save_dir)
-        # down sample
-        x = down(x)
-
-    # bottle neck
-    x = u_net.bottle_neck(x)
-    # plot layer
-    layer_i += 1
-    plot_layer_gen(x, layer_i, save_dir)
-
-    for i, layer in enumerate(u_net.up):
-        # upsample layer
-        x = up(x)
-        x = th.cat([x, hidden_layers[-i-1]], axis=1)
-        x = layer(x)
-        # plot layer
-        layer_i += 1
-        plot_layer_gen(x, layer_i, save_dir)
-
-    x = u_net.final(x)
-    if not u_net.reconstruct:
-        out = img + x
-    return out
-
-
-@ th.no_grad()
 def plot_generator_steps(z, pl_module, save_dir):
     pl_module.eval()
 
@@ -245,33 +164,14 @@ def plot_generator_steps(z, pl_module, save_dir):
     x = pl_module.generator.l1(z).reshape(
         1, init_channels, init_height, init_width).detach()
     gen_inter_layers = []
-    for layer in pl_module.generator.conv_blocks:
+    layer_i = 0
+    for layer in pl_module.generator.conv_blocks[:-1]:
         x = layer(x)
         if layer.__class__.__name__ in ["ConvBlock", "BatchNorm2d", "ResBlock"]:
-            gen_inter_layers.append(
-                x.detach().cpu().clone().permute(1, 0, 2, 3))
-
-    # Plot Inner Layers
-    for i, out in enumerate(gen_inter_layers[:-1]):
-        grid = torchvision.utils.make_grid(
-            out, nrow=NUM_ROWS[out.shape[0]], padding=1, normalize=True).numpy().transpose((1, 2, 0))
-
-        plt.figure(figsize=(12, 8))
-        plt.title(f"Generator Layer {i+1}", fontsize=20)
-        plt.imshow(grid)
-        plt.tight_layout()
-        plt.axis("off")
-        plt.savefig(os.path.join(save_dir, f"gen_layer{i+1}.png"))
-
-        # close everything, i don't know how important it is
-        plt.clf()
-        plt.close()
-
-    # close everything, i don't know how important it is
-    plt.clf()
-    plt.close()
-
-    return gen_inter_layers[-1].permute(1, 0, 2, 3)
+            plot_layer(x, layer_i, save_dir, "gen")
+            layer_i += 1
+    x = pl_module.generator.conv_blocks[-1](x)
+    return x
 
 
 if __name__ == "__main__":
@@ -279,7 +179,7 @@ if __name__ == "__main__":
     parser.add_argument("save_dir", help="save directory path")
     parser.add_argument("checkpoint_dir", help="path to DCGAN checkpoint")
     parser.add_argument(
-        "--data_dir", default="../potsdam_data/potsdam_cars", help="path to real cars directory")
+        "--data_dir", default="../potsdam_data/potsdam_cars_corrected", help="path to real cars directory")
     parser.add_argument("--artificial_dir",
                         default="../potsdam_data/artificial_cars", help="path to artificial cars")
     parser.add_argument("--n_samples", default=10,
@@ -309,9 +209,6 @@ if __name__ == "__main__":
                           device=model.device)
             fake_img = plot_generator_steps(
                 z, model, os.path.join(save_dir, str(i), "fake_img"))
-        elif model.hparams.gen_model == "unet":
-            fake_img = plot_generator_steps_u_net(
-                fake_img_, model, os.path.join(save_dir, str(i), "fake_img"))
 
         if model.hparams.disc_model in ["basic", "resnet"]:
             plot_discriminator_steps(

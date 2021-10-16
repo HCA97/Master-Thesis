@@ -12,17 +12,11 @@ from scripts.dataloader import *
 from scripts.callbacks import *
 
 # POTSDAM CARS
-generator_params = [{"n_layers": 4, "init_channels": 64, "act": "leakyrelu", "bn_mode": "default", "n_blocks": 1},
-                    {"n_layers": 4, "init_channels": 64, "act": "leakyrelu",
-                        "bn_mode": "default", "n_blocks": 1, "use_bn_first_conv": False},
-                    {"n_layers": 4, "init_channels": 64, "act": "leakyrelu",
-                        "bn_mode": "default", "n_blocks": 1, "inject_noise": True},
-                    {"n_layers": 4, "init_channels": 64, "act": "leakyrelu", "inject_noise": True,
-                        "bn_mode": "default", "n_blocks": 1, "use_bn_first_conv": False},
+generator_params = [{"n_layers": 4, "init_channels": 64, "act": "leakyrelu",
+                     "bn_mode": "default", "n_blocks": 1, "inject_noise": True}
                     ]
-discriminator_params = [{"base_channels": 64, "n_layers": 3, "bn_mode": "default"},
-                        {"base_channels": 32, "n_layers": 4, "bn_mode": "default"}]
-
+discriminator_params = {"base_channels": 64,
+                        "n_layers": 3, "bn_mode": "default"}
 beta = 1e-4
 
 img_dim = (3, 32, 64)

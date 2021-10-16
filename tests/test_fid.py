@@ -1,6 +1,9 @@
+from scripts.utility import fid_score
 import os
 import argparse
 
+from matplotlib.offsetbox import TextArea, DrawingArea, OffsetImage, AnnotationBbox
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
@@ -8,8 +11,17 @@ from skimage.transform import swirl
 from skimage.filters import gaussian
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, Dataset
+import lpips
 
-from scripts.utility import fid_score
+
+# save plots for latex
+matplotlib.use("pgf")
+matplotlib.rcParams.update({
+    "pgf.texsystem": "pdflatex",
+    'font.family': 'serif',
+    'text.usetex': True,
+    'pgf.rcfonts': False,
+})
 
 
 class FIDTestFolder(Dataset):
@@ -18,7 +30,8 @@ class FIDTestFolder(Dataset):
         self.root = root
         self.frame = self._parse_frame()
         self.img_size = img_size
-        self.transform = transforms.Compose([transforms.ToTensor(), transforms.Resize(self.img_size),
+        self.transform = transforms.Compose([transforms.ToTensor(),
+                                             transforms.Resize(self.img_size),
                                              transforms.Normalize([0.5], [0.5])])
         if transform:
             self.transform = transform
@@ -78,67 +91,84 @@ class FIDTestFolder(Dataset):
 
 
 # test dataset
-parser = argparse.ArgumentParser("FID Testing Script")
+parser = argparse.ArgumentParser("Testing Script for FID and LPIPS")
 parser.add_argument(
-    "--potsdam_dir", default="../potsdam_data/potsdam_cars", help="path to potsdam cars")
-parser.add_argument("--use_bn", action="store_true",
-                    help="use vgg with bn or not", dest="use_bn")
-parser.set_defaults(use_bn=False)
+    "--potsdam_dir", default="../potsdam_data/potsdam_cars_corrected", help="path to potsdam cars")
+parser.add_argument("--model", default="vgg", choices=["vgg", "alex"],
+                    help="lpips back bone model, vgg or alexnet")
+parser.add_argument("--experiment", default="fid", choices=["fid", "lpips"])
+parser.add_argument("save_dir")
 args = parser.parse_args()
 
 potsdam_dir = args.potsdam_dir
-layer_idx = 33 if args.use_bn else 24
+save_dir = args.save_dir
+experiment = args.experiment
+loss = lpips.LPIPS(net=args.model).cuda()
+os.makedirs(save_dir,  exist_ok=True)
 
-
+# Deformations and their parameters
 deformations = ["swirl", "blur", "salt_pepper_noise", "gaus_noise"]
-params = [[3, 5, 7, 10], [1, 3, 5, 7],
-          [0.01, 0.05, 0.1, 0.25], [0.1, 0.25, 0.50, 0.75]]
-fid_scores = dict((deformation, []) for deformation in deformations)
+params = [[0, 3, 5, 7, 10],
+          [0, 1, 3, 5, 7],
+          [0, 0.01, 0.05, 0.1, 0.25],
+          [0, 0.1, 0.25, 0.50, 0.75]]
 
-fig, axes = plt.subplots(nrows=len(params[0]), ncols=len(deformations) + 1)
-fig.set_size_inches(10, 6)
-for i, (param, deformation) in enumerate(zip(params, deformations)):
-    for j, p in enumerate(param):
-        dataset = FIDTestFolder(potsdam_dir, deformation=deformation,
-                                deformation_kwargs=p)
-        img, img_deformed = dataset[0]
+# save scores to dict so we can plot and save them
+scores = dict((deformation, []) for deformation in deformations)
 
-        # compute fid score
+
+for param, deformation in zip(params, deformations):
+
+    fig, axis = plt.subplots()
+    fig.set_size_inches(8, 5)
+
+    images = []
+    scores = []
+
+    for p in param:
+        dataset = FIDTestFolder(
+            potsdam_dir, deformation=deformation, deformation_kwargs=p)
+
+        # get deformed image
+        _, img_deformed = dataset[0]
+        img_deformed = (img_deformed.numpy().transpose(1, 2, 0) + 1) / 2
+        images.append(img_deformed)
+
         dataloader = DataLoader(dataset, 1024, shuffle=True, num_workers=4)
         imgs1, imgs2 = next(iter(dataloader))
-        fid = fid_score(imgs1, imgs2, device="cuda:0",
-                        layer_idx=layer_idx, use_bn=args.use_bn)
-        print(
-            f"Deformation {deformation} - Param {p} - FID Score {fid}")
-        fid_scores[deformation].append(fid)
 
-        # convert to numpy
-        img_deformed = (img_deformed.numpy().transpose(1, 2, 0) + 1) / 2
-        img = (img.numpy().transpose(1, 2, 0) + 1) / 2
+        if experiment == "fid":
+            # compute fid score
+            score = fid_score(imgs1, imgs2, device="cuda:0",
+                              layer_idx=33, use_bn=True)
+            print(f"Deformation {deformation} - Param {p} - FID Score {score}")
 
-        # plot results
-        axes[j][i].imshow(img_deformed)
-        axes[j][i].set_title(f"{deformation}_{p}")
-        axes[j][4].imshow(img)
-        axes[j][4].set_title("Original")
+        elif experiment == "lpips":
+            # compute lpips
+            score = loss(imgs1.cuda(), imgs2.cuda(),
+                         normalize=True).mean().item()
+            print(
+                f"Deformation {deformation} - Param {p} - LPIPS Score {score}")
 
-# set axis parameters
-for row in axes:
-    for col in row:
-        col.get_xaxis().set_visible(False)
-        col.get_yaxis().set_visible(False)
-plt.tight_layout()
+        # scores[deformation].append(score)
+        scores.append(score)
 
-# plot fid
-plt.figure()
-for i, deformation in enumerate(fid_scores):
-    plt.subplot(2, 2, i+1)
-    plt.title(f"FID Score {deformation}")
-    y = [0] + fid_scores[deformation]
-    x = np.arange(0, len(y), 1)
-    plt.plot(x, y, marker="*")
-    plt.xlabel("Disturbance")
-    plt.ylabel("FID Score")
-plt.tight_layout()
+    y_max = max(scores)
+    for i, img in enumerate(images):
+        imagebox = OffsetImage(img, zoom=1.5)
+        ab = AnnotationBbox(
+            imagebox, (i, y_max + (3 if experiment == "fid" else 0.25)))
+        axis.add_artist(ab)
 
-plt.show()
+    axis.plot(range(len(scores)), scores, marker="*")
+    plt.draw()
+    axis.set_xlim(-0.5, len(scores) - 0.5)
+    axis.set_ylim(0, y_max + (4 if experiment == "fid" else 0.3))
+    axis.set_ylabel("FID Score" if experiment ==
+                    "fid" else "LPIPS Score", fontsize=26)
+    axis.set_xlabel("Disturbance Level", fontsize=26)
+    axis.tick_params(axis='both', which='major', labelsize=24)
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_dir, f"{experiment}_{deformation}.pgf"))
+    plt.clf()
+    plt.close()

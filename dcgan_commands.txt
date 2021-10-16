@@ -1,0 +1,142 @@
+#
+# baseline
+#
+
+## version 0
+
+python eval_dcgan.py experiments/baseline/lightning_logs/version_0/checkpoints/ experiments/baseline/version_0/results --interval 25 --skip_train_fid
+python eval_discriminator.py experiments/baseline/version_0/ experiments/baseline/lightning_logs/version_0/checkpoints/epoch\=474.ckpt experiments/baseline/version_0/results/images/epoch\=474/ 
+python vis_inner_layer_dcgan.py experiments/baseline/version_0/vis_inner_layer_epoch=474 experiments/baseline/lightning_logs/version_0/checkpoints/epoch\=474.ckpt 
+
+#
+# big_gan
+#
+
+## version 0
+
+python eval_dcgan.py experiments/dcgan_bigger/lightning_logs/version_0/checkpoints/ experiments/dcgan_bigger/version_0/results --interval 25 --skip_train_fid
+python eval_discriminator.py experiments/dcgan_bigger/version_0/ experiments/dcgan_bigger/lightning_logs/version_0/checkpoints/epoch\=349.ckpt experiments/dcgan_bigger/version_0/results/images/epoch\=349/ 
+python vis_inner_layer_dcgan.py experiments/dcgan_bigger/version_0/vis_inner_layer_epoch=349 experiments/dcgan_bigger/lightning_logs/version_0/checkpoints/epoch\=349.ckpt 
+
+## version 1
+
+python eval_dcgan.py experiments/dcgan_bigger/lightning_logs/version_1/checkpoints/ experiments/dcgan_bigger/version_1/results --interval 25 --skip_train_fid
+python eval_discriminator.py experiments/dcgan_bigger/version_1/ experiments/dcgan_bigger/lightning_logs/version_1/checkpoints/epoch\=499.ckpt experiments/dcgan_bigger/version_1/results/images/epoch\=499/ 
+python vis_inner_layer_dcgan.py experiments/dcgan_bigger/version_1/vis_inner_layer_epoch=499 experiments/dcgan_bigger/lightning_logs/version_1/checkpoints/epoch\=499.ckpt 
+
+## version 2
+
+python eval_dcgan.py experiments/dcgan_bigger/lightning_logs/version_2/checkpoints/ experiments/dcgan_bigger/version_2/results --interval 25 --skip_train_fid
+python eval_discriminator.py experiments/dcgan_bigger/version_2/ experiments/dcgan_bigger/lightning_logs/version_2/checkpoints/epoch\=349.ckpt experiments/dcgan_bigger/version_2/results/images/epoch\=349/ 
+python vis_inner_layer_dcgan.py experiments/dcgan_bigger/version_2/vis_inner_layer_epoch=349 experiments/dcgan_bigger/lightning_logs/version_2/checkpoints/epoch\=349.ckpt 
+
+#
+# gp
+#
+
+## version 0
+python eval_dcgan.py experiments/gp_corrected/lightning_logs/version_0/checkpoints/ experiments/gp_corrected/version_0/results --interval 25 --skip_train_fid
+python eval_discriminator.py experiments/gp_corrected/version_0/ experiments/gp_corrected/lightning_logs/version_0/checkpoints/epoch\=474.ckpt experiments/gp_corrected/version_0/results/images/epoch\=474/ 
+python vis_inner_layer_dcgan.py experiments/gp_corrected/version_0/vis_inner_layer_epoch=474 experiments/gp_corrected/lightning_logs/version_0/checkpoints/epoch\=474.ckpt 
+
+## version 1
+python eval_dcgan.py experiments/gp_corrected/lightning_logs/version_1/checkpoints/ experiments/gp_corrected/version_1/results --interval 25 --skip_train_fid
+python eval_discriminator.py experiments/gp_corrected/version_1/ experiments/gp_corrected/lightning_logs/version_1/checkpoints/epoch\=449.ckpt experiments/gp_corrected/version_1/results/images/epoch\=449/ 
+python vis_inner_layer_dcgan.py experiments/gp_corrected/version_1/vis_inner_layer_epoch=449 experiments/gp_corrected/lightning_logs/version_1/checkpoints/epoch\=449.ckpt 
+
+
+## version 2
+python eval_dcgan.py experiments/gp_corrected/lightning_logs/version_2/checkpoints/ experiments/gp_corrected/version_2/results --interval 25 --skip_train_fid
+
+#
+# data aug
+#
+
+## version 0
+python eval_dcgan.py experiments/dataaug_all/lightning_logs/version_0/checkpoints/ experiments/dataaug_all/version_0/results --interval 25 --skip_train_fid
+python eval_discriminator.py experiments/dataaug_all/version_0/ experiments/dataaug_all/lightning_logs/version_0/checkpoints/epoch\=449.ckpt experiments/dataaug_all/version_0/results/images/epoch\=449/ 
+python vis_inner_layer_dcgan.py experiments/dataaug_all/version_0/vis_inner_layer_epoch=449 experiments/dataaug_all/lightning_logs/version_0/checkpoints/epoch\=449.ckpt 
+
+
+## version 1
+python eval_dcgan.py experiments/dataaug_all/lightning_logs/version_1/checkpoints/ experiments/dataaug_all/version_1/results --interval 25 --skip_train_fid
+python eval_discriminator.py experiments/dataaug_all/version_1/ experiments/dataaug_all/lightning_logs/version_1/checkpoints/epoch\=499.ckpt experiments/dataaug_all/version_1/results/images/epoch\=499/ 
+python vis_inner_layer_dcgan.py experiments/dataaug_all/version_1/vis_inner_layer_epoch=499 experiments/dataaug_all/lightning_logs/version_1/checkpoints/epoch\=499.ckpt 
+
+
+## version 2
+python eval_dcgan.py experiments/dataaug_all/lightning_logs/version_2/checkpoints/ experiments/dataaug_all/version_2/results --interval 25 --skip_train_fid
+python eval_discriminator.py experiments/dataaug_all/version_2/ experiments/dataaug_all/lightning_logs/version_2/checkpoints/epoch\=449.ckpt experiments/dataaug_all/version_2/results/images/epoch\=449/ 
+python vis_inner_layer_dcgan.py experiments/dataaug_all/version_2/vis_inner_layer_epoch=449 experiments/dataaug_all/lightning_logs/version_2/checkpoints/epoch\=449.ckpt 
+
+
+## version 3
+python eval_dcgan.py experiments/dataaug_all/lightning_logs/version_3/checkpoints/ experiments/dataaug_all/version_3/results --interval 25 --skip_train_fid
+python eval_discriminator.py experiments/dataaug_all/version_3/ experiments/dataaug_all/lightning_logs/version_3/checkpoints/epoch\=499.ckpt experiments/dataaug_all/version_3/results/images/epoch\=499/ 
+python vis_inner_layer_dcgan.py experiments/dataaug_all/version_3/vis_inner_layer_epoch=499 experiments/dataaug_all/lightning_logs/version_3/checkpoints/epoch\=499.ckpt 
+
+#
+# data aug + gp
+#
+
+## version 0
+python eval_dcgan.py experiments/best_gp_dataaug/lightning_logs/version_0/checkpoints/ experiments/best_gp_dataaug/version_0/results --interval 25 --skip_train_fid
+python eval_discriminator.py experiments/best_gp_dataaug/version_0/ experiments/best_gp_dataaug/lightning_logs/version_0/checkpoints/epoch\=449.ckpt experiments/best_gp_dataaug/version_0/results/images/epoch\=449/ 
+python vis_inner_layer_dcgan.py experiments/best_gp_dataaug/version_0/vis_inner_layer_epoch=449 experiments/best_gp_dataaug/lightning_logs/version_0/checkpoints/epoch\=449.ckpt 
+
+#
+# big_img
+#
+
+## version 0
+python eval_dcgan.py experiments/big_image/lightning_logs/version_0/checkpoints/ experiments/big_image/version_0/results --interval 25 --skip_train_fid --width 128 --height 64
+python eval_discriminator.py experiments/big_image/version_0/ experiments/big_image/lightning_logs/version_0/checkpoints/epoch\=449.ckpt experiments/big_image/version_0/results/images/epoch\=449/ 
+python vis_inner_layer_dcgan.py experiments/big_image/version_0/vis_inner_layer_epoch=449 experiments/big_image/lightning_logs/version_0/checkpoints/epoch\=449.ckpt 
+
+
+## version 1
+python eval_dcgan.py experiments/big_image/lightning_logs/version_1/checkpoints/ experiments/big_image/version_1/results --interval 25 --skip_train_fid --width 128 --height 64
+python eval_discriminator.py experiments/big_image/version_1/ experiments/big_image/lightning_logs/version_1/checkpoints/epoch\=449.ckpt experiments/big_image/version_1/results/images/epoch\=449/ 
+python vis_inner_layer_dcgan.py experiments/big_image/version_1/vis_inner_layer_epoch=449 experiments/big_image/lightning_logs/version_1/checkpoints/epoch\=449.ckpt 
+
+
+## version 2
+python eval_dcgan.py experiments/big_image/lightning_logs/version_2/checkpoints/ experiments/big_image/version_2/results --interval 25 --skip_train_fid --width 128 --height 64
+python eval_discriminator.py experiments/big_image/version_2/ experiments/big_image/lightning_logs/version_2/checkpoints/epoch\=449.ckpt experiments/big_image/version_2/results/images/epoch\=449/ 
+python vis_inner_layer_dcgan.py experiments/big_image/version_2/vis_inner_layer_epoch=449 experiments/big_image/lightning_logs/version_2/checkpoints/epoch\=449.ckpt 
+
+
+#
+# resnet
+#
+
+## version 0
+python eval_dcgan.py experiments/resnet/lightning_logs/version_0/checkpoints/ experiments/resnet/version_0/results --interval 25 --skip_train_fid
+
+
+#
+# heatmap
+#
+
+## version 0
+python eval_dcgan.py experiments/dcgan_heatmap/lightning_logs/version_0/checkpoints/ experiments/dcgan_heatmap/version_0/results --skip_train_fid
+python eval_discriminator.py experiments/dcgan_heatmap/version_0/ experiments/dcgan_heatmap/lightning_logs/version_0/checkpoints/epoch\=474.ckpt experiments/dcgan_heatmap/version_0/results/images/epoch\=474/ 
+python vis_inner_layer_dcgan.py experiments/dcgan_heatmap/version_0/vis_inner_layer_epoch=474 experiments/dcgan_heatmap/lightning_logs/version_0/checkpoints/epoch\=474.ckpt 
+
+
+#
+# huge
+#
+
+## version 0
+python eval_dcgan.py experiments/dcgan_huge/lightning_logs/version_0/checkpoints/ experiments/dcgan_huge/version_0/results --skip_train_fid
+python eval_discriminator.py experiments/dcgan_huge/version_0/ experiments/dcgan_huge/lightning_logs/version_0/checkpoints/epoch\=424.ckpt experiments/dcgan_huge/version_0/results/images/epoch\=424/ 
+python vis_inner_layer_dcgan.py experiments/dcgan_huge/version_0/vis_inner_layer_epoch=424 experiments/dcgan_huge/lightning_logs/version_0/checkpoints/epoch\=424.ckpt 
+
+# everything up to here uses f15a7f88ab5a2a4453294a818c102ac9ceb4707e
+
+
+
+python eval_dcgan.py experiments/dataaug/lightning_logs/version_1/checkpoints/ experiments/dataaug/version_1/results --interval 25 --skip_fid
+python eval_discriminator.py experiments/dataaug/version_1/ experiments/dataaug/lightning_logs/version_1/checkpoints/epoch\=999.ckpt experiments/dataaug/version_1/results/images/epoch\=999/ 
+python vis_inner_layer_dcgan.py experiments/dataaug/version_1/vis_inner_layer_epoch=999 experiments/dataaug/lightning_logs/version_1/checkpoints/epoch\=999.ckpt 

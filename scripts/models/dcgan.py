@@ -30,6 +30,8 @@ class GAN(pl.LightningModule):
                  use_lr_scheduler=False,
                  learning_rate_gen=0.0002,
                  learning_rate_disc=0.0002,
+                 weight_decay_disc=0.0,
+                 weight_decay_gen=0.0,
                  betas=(0.5, 0.999),
                  # Model Parameters
                  discriminator_params=None,
@@ -41,12 +43,6 @@ class GAN(pl.LightningModule):
                  # GAN Loss
                  use_symmetry_loss=False,
                  gamma=1,
-                 # For pix2pix reconstruction loss
-                 rec_loss="l1",
-                 beta=1.0,
-                 # Training Strategies
-                 use_buffer=False,
-                 buffer_size=1000,
                  **kwargs):
 
         super().__init__()
@@ -56,13 +52,7 @@ class GAN(pl.LightningModule):
         self.discriminator = self.get_discriminator(discriminator_params)
         self.criterion = self.get_criterion()
 
-        if use_buffer:
-            if buffer_size % 100 != 0:
-                raise AttributeError(
-                    "Length of the buffer must be divisible by 100.")
-            self.buffer = [None for i in range(buffer_size)]
-
-        # ingerating FID score
+        # for FID score computation
         self.n_samples = 1024
         self.act_real = []
         self.act_samples = 64
@@ -85,12 +75,6 @@ class GAN(pl.LightningModule):
         elif self.hparams.gen_model == "resnet":
             generator = ResNetGenerator(
                 self.hparams.img_dim, **generator_params)
-        elif self.hparams.gen_model == "unet":
-            generator = UnetGenerator(
-                n_channels=self.hparams.img_dim[0], **generator_params)
-        elif self.hparams.gen_model == "refiner":
-            generator = RefinerNet(
-                n_channels=self.hparams.img_dim[0], **generator_params)
         else:
             raise NotImplementedError()
 
@@ -126,10 +110,12 @@ class GAN(pl.LightningModule):
         opt_disc = th.optim.Adam(
             self.discriminator.parameters(),
             lr=self.hparams.learning_rate_disc,
+            weight_decay=weight_decay_disc,
             betas=self.hparams.betas)
         opt_gen = th.optim.Adam(
             self.generator.parameters(),
             lr=self.hparams.learning_rate_gen,
+            weight_decay=weight_decay_gen,
             betas=self.hparams.betas)
 
         # scheduler - patience is 125 epochs
@@ -148,25 +134,18 @@ class GAN(pl.LightningModule):
     def training_step(self, batch, batch_idx, optimizer_idx):
         real, fake = batch
 
-        # append real image activation for FID computation
-        if len(self.act_real) < self.n_samples:
-            act = np.squeeze(vgg16_get_activation_maps(
-                real, layer_idx=33, device="cpu", normalize_range=(-1, 1)).numpy())
-            self.act_real = np.concatenate(
-                (self.act_real, act), axis=0) if len(self.act_real) > 0 else act
+        if hparams_initial.fid_interval > 0:
+            # append real image activation for FID computation
+            if len(self.act_real) < self.n_samples:
+                act = np.squeeze(vgg16_get_activation_maps(
+                    real, layer_idx=33, device="cpu", normalize_range=(-1, 1)).numpy())
+                self.act_real = np.concatenate(
+                    (self.act_real, act), axis=0) if len(self.act_real) > 0 else act
 
-        # append fake images or noise vectors for FID computation
-        if len(self.gen_input) < self.n_samples:
-            if self.hparams.gen_model in ["unet", "refiner"]:
-                self.gen_input = th.cat((self.gen_input, fake), dim=0) if len(
-                    self.gen_input) > 0 else fake
-            else:
+            # append fake images or noise vectors for FID computation
+            if len(self.gen_input) < self.n_samples:
                 self.gen_input = th.normal(
                     0, 1, (self.n_samples, self.generator.latent_dim), device=self.device)
-
-        # store the first batch for Pix2Pix callback
-        if self.imgs_real is None:
-            self.imgs_real = real
 
         result = None
 
@@ -178,49 +157,13 @@ class GAN(pl.LightningModule):
             real_loss = compute_loss(real_pred, 1, self.criterion)
 
             # Train with fake
-            if self.hparams.gen_model in ["unet", "refiner"]:
-                fake_ = self.generator(fake)
-            else:
-                z = th.normal(0, 1, size=(
-                    len(real), self.generator.latent_dim), device=self.device)
-                fake_ = self.generator(z)
-
-            # Buffer
-            if self.hparams.use_buffer:
-                # copy the batch so we can copy it to buffer later
-                fake_copy = fake_.detach().cpu().clone()
-
-                # skip buffer until it is full
-                try:
-                    self.buffer.index(None)
-                except ValueError:
-                    pick = len(fake_) // 2
-                    idx = np.random.choice(
-                        len(self.buffer), pick, replace=False)
-
-                    for i in range(pick):
-                        fake_[i] = self.buffer[idx[i]].to(self.device)
+            z = th.normal(0, 1, size=(
+                len(real), self.generator.latent_dim), device=self.device)
+            fake_ = self.generator(z)
 
             # Loss
             fake_pred = self.discriminator(fake_)
             fake_loss = compute_loss(fake_pred, 0, self.criterion)
-
-            if self.hparams.use_buffer:
-                # remember up to 100 iterations
-                cases = len(self.buffer) // 100
-
-                if len(fake_copy) < cases:
-                    raise RuntimeError(
-                        f"If you are using ``use_buffer`` the batch size must be larger than {cases}. Either decrease the size of your buffer or increase your batch size.")
-
-                # slice in the buffer, not the best but it works
-                si = cases * (self.global_step % 100)
-                ei = min(si + cases, len(self.buffer))  # incase it overshoots
-
-                # store the buffer
-                pick = ei - si  # incase it overshoots
-                if pick > 0:
-                    self.buffer[si:ei] = fake_copy[:pick]
 
             # Total Loss
             result = real_loss + fake_loss
@@ -232,23 +175,12 @@ class GAN(pl.LightningModule):
 
         # Train generator
         if optimizer_idx == 1:
-            l1_loss = 0
-            if self.hparams.gen_model in ["unet", "refiner"]:
-                fake_ = self.generator(fake)
-
-                # L1-Norm
-                if self.hparams.rec_loss == "l1":
-                    l1_loss = self.hparams.beta * th.sum(th.abs(fake - fake_))
-                elif self.hparams.rec_loss == "l1_channel_avg":
-                    l1_loss = self.hparams.beta * \
-                        th.sum(th.abs(fake.mean(axis=(1)) -
-                               fake_.mean(axis=(1))))
-            else:
-                z = th.normal(0, 1, size=(
-                    len(real), self.generator.latent_dim), device=self.device)
-                fake_ = self.generator(z)
+            z = th.normal(0, 1, size=(
+                len(real), self.generator.latent_dim), device=self.device)
+            fake_ = self.generator(z)
 
             symmetry_loss = 0
+            # car must be symmetical
             if self.hparams.use_symmetry_loss:
                 r = self.hparams.img_dim[1]
                 idx_1 = list(range(0, r//2))
@@ -265,12 +197,10 @@ class GAN(pl.LightningModule):
             gen_loss = compute_loss(fake_pred, 1, self.criterion)
 
             # Total Loss
-            result = gen_loss + l1_loss + symmetry_loss
+            result = gen_loss + symmetry_loss
 
             # Logging
             self.log("loss/gen", gen_loss)
-            if self.hparams.gen_model in ["unet", "refiner"]:
-                self.log("loss/gen_l1", l1_loss)
             if self.hparams.use_symmetry_loss:
                 self.log("loss/gen_symmetry", symmetry_loss)
 

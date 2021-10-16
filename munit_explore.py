@@ -24,6 +24,10 @@ if __name__ == "__main__":
                         help="interval between two epochs")
     parser.add_argument("--results_name", default="results",
                         help="results name")
+    parser.add_argument("--use_edges", action="store_true")
+    parser.add_argument("--use_dynamic_padding", action="store_true")
+    parser.set_defaults(use_dynamic_padding=False)
+    parser.set_defaults(use_edges=False)
     args = parser.parse_args()
 
     experiment_dir = args.experiment_dir
@@ -40,6 +44,19 @@ if __name__ == "__main__":
     n_samples = 10
 
     max_epochs = 1000
+
+    artificial_transform = [transforms.Resize((32, 64)),
+                            transforms.ToTensor(),
+                            transforms.RandomHorizontalFlip(p=0.5),
+                            transforms.RandomVerticalFlip(p=0.5),
+                            transforms.Normalize([0.5], [0.5])]
+    if args.use_edges:
+        artificial_transform.insert(1, Skeleton(1, 20, True))
+
+    if args.use_dynamic_padding:
+        artificial_transform.insert(0, DynamicPad(min_img_dim=(130, 70)))
+        artificial_transform.insert(1, transforms.RandomCrop(
+            (60, 120), padding_mode="reflect"))
 
     # checkpoints
     checkpoints = [
@@ -75,22 +92,50 @@ if __name__ == "__main__":
 
                     if img_real is None or img_fake is None:
                         img_dim = model.hparams.img_dim
-                        transform1 = transforms.Compose([transforms.Resize(img_dim[1:]),
-                                                        transforms.ToTensor(),
-                                                        transforms.RandomHorizontalFlip(
-                                                            p=0.5),
-                                                        transforms.RandomVerticalFlip(
-                                                            p=0.5),
-                                                        transforms.ColorJitter(
-                                                            hue=[-0.1, 0.1]),
-                                                        transforms.Normalize([0.5], [0.5])])
-                        transform2 = transforms.Compose([transforms.Resize(img_dim[1:]),
-                                                        transforms.ToTensor(),
-                                                        transforms.RandomHorizontalFlip(
-                                                            p=0.5),
-                                                        transforms.RandomVerticalFlip(
-                                                            p=0.5),
-                                                        transforms.Normalize([0.5], [0.5])])
+                        # transform1 = transforms.Compose([transforms.Resize(img_dim[1:]),
+                        #                                 transforms.ToTensor(),
+                        #                                 transforms.RandomHorizontalFlip(
+                        #                                     p=0.5),
+                        #                                 transforms.RandomVerticalFlip(
+                        #                                     p=0.5),
+                        #                                 transforms.ColorJitter(
+                        #                                     hue=[-0.1, 0.1]),
+                        #                                 transforms.Normalize([0.5], [0.5])])
+                        transform1 = transforms.Compose([transforms.ColorJitter(hue=[-0.1, 0.1]),
+                                                         DynamicPad(min_img_dim=(110, 60),
+                                                                    padding_mode="edge"),
+                                                         transforms.RandomCrop(
+                                                             (55, 105), padding_mode="reflect"),
+                                                         transforms.Resize(
+                                                             img_dim[1:]),
+                                                         transforms.RandomHorizontalFlip(
+                                                             p=0.5),
+                                                         transforms.RandomVerticalFlip(
+                                                             p=0.5),
+                                                         transforms.ToTensor(),
+                                                         transforms.Normalize([0.5], [0.5])])
+
+                        if img_dim != (32, 64):
+                            artificial_transform[2 if args.use_dynamic_padding else 0] = transforms.Resize(
+                                img_dim[1:])
+                        # transform2 = transforms.Compose(artificial_transform)
+                        transform2 = transforms.Compose([transforms.ColorJitter(hue=[-0.1, 0.1]),
+                                                         DynamicPad(min_img_dim=(130, 70),
+                                                                    padding_mode="constant", padding_value=125),
+                                                         transforms.RandomRotation(
+                                                             degrees=5, resample=PIL.Image.NEAREST, fill=125),
+                                                         transforms.RandomCrop(
+                                                             (60, 120), padding_mode="reflect"),
+                                                         transforms.Resize(
+                                                             img_dim[1:]),
+                                                         transforms.RandomHorizontalFlip(
+                                                             p=0.5),
+                                                         transforms.RandomVerticalFlip(
+                                                             p=0.5),
+                                                         transforms.ToTensor(),
+                                                         transforms.Normalize(
+                                                             [0.5], [0.5]),
+                                                         AddNoise(alpha=0.07)])
 
                         datasetmodule = PostdamCarsDataModule(potsdam_dir,
                                                               data_dir2=artificial_dir,

@@ -9,8 +9,19 @@ from torchvision import transforms
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
 
 from scripts import *
+
+# save plots for latex
+matplotlib.use("pgf")
+matplotlib.rcParams.update({
+    "pgf.texsystem": "pdflatex",
+    'font.family': 'serif',
+    'text.usetex': True,
+    'pgf.rcfonts': False,
+})
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("checkpoint_dir", help="experiment folder")
@@ -31,7 +42,7 @@ for checkpoint in checkpoints:
         model.eval()
         model.cuda()
 
-        generator = model.generator_avg if model.hparams.moving_average else model.generator
+        generator = model.generator
 
         ppl = perceptual_path_length(
             generator, n_samples=1024*5, net="vgg", device=model.device, batch_size=128)
@@ -39,12 +50,17 @@ for checkpoint in checkpoints:
 
         ppls.append(ppl)
 
-# plt.figure()
+# determine where to save using checkpoint dir
+root, version = os.path.split(os.path.split(args.checkpoint_dir)[0])
+root = os.path.split(root)[0]
+save_dir = os.path.join(root, version)
+os.makedirs(save_dir, exist_ok=True)
+
+# plot and save it
 plt.plot(checkpoints[:len(ppls)], ppls, marker="*")
 plt.xlabel("Epochs", fontsize=18)
 plt.ylabel("PPL Score", fontsize=18)
-plt.title("PPL Score", fontsize=20)
 plt.xticks(fontsize=14)
 plt.yticks(fontsize=14)
 plt.tight_layout()
-plt.show()
+plt.savefig(os.path.join(save_dir, "ppl_score.pgf"))

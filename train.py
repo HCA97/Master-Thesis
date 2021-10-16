@@ -30,17 +30,17 @@ discriminator_params = {
                         }
 }
 
-img_dim = (3, 32, 64)
+img_dim = (3, 60, 120)
 batch_size = 64
 max_epochs = 500
 interval = 25
 
-data_dir1 = "/scratch/s7hialtu/potsdam_cars_all"
+data_dir1 = "/scratch/s7hialtu/potsdam_cars_corrected"
 data_dir2 = "/scratch/s7hialtu/training_tightcanvas_graybackground"
-results_dir = "/scratch/s7hialtu/munit_artificial2real_graybackground_dynamic_padding_noise"
+results_dir = "/scratch/s7hialtu/munit_"
 
 if not os.path.isdir(data_dir1):
-    data_dir1 = "../potsdam_data/potsdam_cars_all"
+    data_dir1 = "../potsdam_data/potsdam_cars_corrected"
     data_dir2 = "../potsdam_data/cem-v0/v2/training_tightcanvas_graybackground"
     results_dir = "logs"
 
@@ -50,7 +50,7 @@ transform1 = transforms.Compose([transforms.ColorJitter(hue=[-0.1, 0.1]),
                                             padding_mode="edge"),
                                  transforms.RandomCrop(
                                      (55, 105), padding_mode="reflect"),
-                                 transforms.Resize((32, 64)),
+                                 transforms.Resize(img_dim[1:]),
                                  transforms.RandomHorizontalFlip(p=0.5),
                                  transforms.RandomVerticalFlip(p=0.5),
                                  transforms.ToTensor(),
@@ -63,7 +63,7 @@ transform2 = transforms.Compose([transforms.ColorJitter(hue=[-0.1, 0.1]),
                                      degrees=5, resample=PIL.Image.NEAREST, fill=125),
                                  transforms.RandomCrop(
                                      (60, 120), padding_mode="reflect"),
-                                 transforms.Resize((32, 64)),
+                                 transforms.Resize(img_dim[1:]),
                                  transforms.RandomHorizontalFlip(p=0.5),
                                  transforms.RandomVerticalFlip(p=0.5),
                                  transforms.ToTensor(),

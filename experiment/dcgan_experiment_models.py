@@ -14,17 +14,19 @@ from scripts.callbacks import *
 
 # POTSDAM CARS
 generator_params = [
-    ("basic", {"n_layers": 4, "init_channels": 512,
-     "bn_mode": "default", "learn_upsample": True}),
-    ("basic", {"n_layers": 4, "init_channels": 512,
-     "bn_mode": "default", "learn_upsample": True, "learn_latent": True}),
-    ("basic", {"n_layers": 4, "init_channels": 512,
-               "bn_mode": "default", "learn_upsample": True, "learn_latent": True, "inject_noise": True}),
-    ("resnet", {"n_layers": 4, "init_channels": 512,
-                "bn_mode": "default", "learn_upsample": True, "learn_latent": True, "inject_noise": True})]
+    ("basic", {"n_layers": 4, "init_channels": 512, "learn_upsample": False,
+               "bn_mode": "default", "use_spectral": False})
+    ("basic", {"n_layers": 4, "init_channels": 512, "learn_upsample": True,
+               "bn_mode": "default", "use_spectral": True, "use_1x1_conv": False})
+]
 
-discriminator_params = [{"base_channels": 32, "n_layers": 4, "bn_mode": "default"},
-                        {"base_channels": 32, "n_layers": 4, "bn_mode": "default", "heat_map": True}]
+discriminator_params = {"base_channels": 32, "n_layers": 4,
+                        "bn_mode": "default", "use_spectral": True}
+
+training_params = [{"one_sided_label_smoothing": True},
+                   {"learning_rate_disc": 0.0004},
+                   {"use_gp": True, "alpha": 0.1},
+                   {"use_lr_scheduler": True}]
 
 img_dim = (3, 32, 64)
 batch_size = 64
@@ -36,7 +38,8 @@ transform = transforms.Compose([transforms.Resize(img_dim[1:]),
                                 transforms.ToTensor(),
                                 transforms.RandomHorizontalFlip(p=0.5),
                                 transforms.RandomVerticalFlip(p=0.5),
-                                transforms.ColorJitter(hue=[-0.1, 0.1]),
+                                transforms.ColorJitter(
+                                    hue=[-0.1, 0.1], contrast=[1, 1.25]),
                                 transforms.Normalize([0.5], [0.5])])
 
 data_dir = "/scratch/s7hialtu/potsdam_cars"
@@ -46,10 +49,10 @@ if not os.path.isdir(data_dir):
     data_dir = "../potsdam_data/potsdam_cars"
     results_dir = "logs"
 
-for gen_model, generator_param in generator_params:
-    for discriminator_param in discriminator_params:
-        model = GAN(img_dim, discriminator_params=discriminator_param, fid_interval=interval,
-                    generator_params=generator_param, gen_model=gen_model)
+for training_param in training_params:
+    for gen_model, generator_param in generator_params:
+        model = GAN(img_dim, discriminator_params=discriminator_params, fid_interval=interval,
+                    generator_params=generator_param, gen_model=gen_model, **training_param)
 
         potsdam = PostdamCarsDataModule(
             data_dir, img_size=img_dim[1:], batch_size=batch_size, transform=transform)

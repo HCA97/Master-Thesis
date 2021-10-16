@@ -10,9 +10,19 @@ from sklearn.metrics import davies_bouldin_score
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
+import matplotlib
 import numpy as np
 
 from scripts import *
+
+# save plots for latex
+matplotlib.use("pgf")
+matplotlib.rcParams.update({
+    "pgf.texsystem": "pdflatex",
+    'font.family': 'serif',
+    'text.usetex': True,
+    'pgf.rcfonts': False,
+})
 
 parser = argparse.ArgumentParser("Cluster cars using VGG-16 features")
 parser.add_argument(
@@ -91,15 +101,16 @@ n_clusters = int(np.max(labels))+1
 # DB SCORE
 plt.figure(figsize=(8, 6))
 plt.plot(clusters, db_score, marker="*")
-plt.title("Clustering Score", fontsize=20)
+# plt.title("Clustering Score", fontsize=20)
 plt.xticks([clusters[i]
-            for i in range(0, len(clusters)+1, 2)], fontsize=14)
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
-plt.ylabel("Davies Bouldin Score", fontsize=18)
-plt.xlabel("# of Clusters", fontsize=18)
+            for i in range(0, len(clusters)+1, 2)], fontsize=18)
+plt.yticks(fontsize=18)
+plt.ylabel("Davies Bouldin Score", fontsize=22)
+plt.xlabel("Number of Clusters", fontsize=22)
+plt.gca().spines['right'].set_visible(False)
+plt.gca().spines['top'].set_visible(False)
 plt.tight_layout()
-plt.savefig(os.path.join(save_dir, "db_results.png"))
+plt.savefig(os.path.join(save_dir, "db_results.pgf"))
 plt.clf()
 plt.close()
 
@@ -108,17 +119,19 @@ plt.figure(figsize=(8, 6))
 for i in range(n_clusters):
     plt.plot(feat_2[labels == i, 0],
              feat_2[labels == i, 1], ".", label=f"Cluster {i+1}")
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
-plt.legend(prop={'size': 14})
-plt.title("TSN-E Visualization", fontsize=18)
+plt.xticks(fontsize=18)
+plt.yticks(fontsize=18)
+plt.legend(prop={'size': 18})
+# plt.title("TSN-E Visualization", fontsize=18)
+plt.gca().spines['right'].set_visible(False)
+plt.gca().spines['top'].set_visible(False)
 plt.tight_layout()
-plt.savefig(os.path.join(save_dir, "tsne.png"))
+plt.savefig(os.path.join(save_dir, "tsne.pgf"))
 plt.clf()
 plt.close()
 
 
-# CLUSTERS
+# # CLUSTERS
 for i in range(n_clusters):
     imgs = cars[labels == i][:, :, :, [0, 1, 2]]
 

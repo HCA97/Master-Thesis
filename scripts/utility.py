@@ -11,42 +11,9 @@ import lpips
 import PIL
 import cv2
 
-
-def sim_gan_initial_start(dataloader, generator, discriminator, img_dim=(3, 32, 64), n_epochs=10, device="cuda:0"):
-
-    # PRE-Train REFINER
-    alpha = 0.9
-    gen = generator.to(device)
-    opt = th.optim.Adam(gen.parameters())
-    rec_loss = lpips.LPIPS(net="vgg").to(device)
-    for _ in tqdm.tqdm(range(n_epochs), desc="Generator"):
-        for _, fake in dataloader:
-            opt.zero_grad()
-            noise = 2 * th.rand(fake.shape, device=device) - 1
-            fake_rec = gen(alpha * fake.to(device) + (1 - alpha) * noise)
-            loss = th.mean(th.abs(fake_rec - fake.to(device))) + \
-                th.mean(rec_loss(fake_rec, fake.to(device), normalize=True))
-            loss.backward()
-            opt.step()
-
-    # PRE-Train Discriminator
-    disc = discriminator.to(device)
-
-    opt = th.optim.Adam(disc.parameters())
-    loss = th.nn.BCELoss()
-    for _ in tqdm.tqdm(range(n_epochs), desc="Discriminator"):
-        for real, fake in dataloader:
-            opt.zero_grad()
-            with th.no_grad():
-                fake_rec = gen(fake.to(device))
-            fake_pred = disc(fake_rec)
-            real_pred = disc(real.to(device))
-            l = compute_loss(fake_pred, 0, loss) + \
-                compute_loss(real_pred, 1, loss)
-            l.backward()
-            opt.step()
-
-    return gen, disc
+#
+# Transformations
+#
 
 
 class AddNoise(th.nn.Module):
@@ -87,6 +54,8 @@ class DynamicPad(th.nn.Module):
 
 
 class Skeleton(th.nn.Module):
+    """Applies Canny edge detection on vehicles. It is used for edge-to-car translation."""
+
     def __init__(self, ratio=0.9, min_length=10, smooth=False, canny=True):
         super().__init__()
         self.ratio = max(0, min(ratio, 1))
@@ -134,6 +103,10 @@ class Skeleton(th.nn.Module):
         # return PIL.Image
         return PIL.Image.fromarray(cnt).convert('RGB')
 
+#
+# Training
+#
+
 
 def compute_loss(predictions: Union[th.Tensor, List[th.Tensor]], label: int, criteria: th.nn.Module):
     """[summary]
@@ -163,23 +136,6 @@ def compute_loss(predictions: Union[th.Tensor, List[th.Tensor]], label: int, cri
                                 dtype=predictions.dtype, device=predictions.device)
         loss += criteria(predictions, gt)
     return loss
-
-
-def weights_init_stylegan(m):
-    classname = m.__class__.__name__
-    if classname.find("Conv") != -1:
-        try:
-            th.nn.init.normal_(m.weight.data, 0.0, 1)
-        except:
-            pass
-    elif classname.find("Linear") != -1:
-        try:
-            th.nn.init.normal_(m.weight.data, 0.0, 1)
-        except:
-            pass
-    elif classname.find("BatchNorm2d") != -1:
-        th.nn.init.normal_(m.weight.data, 1.0, 1)
-        th.nn.init.constant_(m.bias.data, 0.0)
 
 
 def weights_init_normal(m):
@@ -251,6 +207,10 @@ def interpolate(p1: th.Tensor, p2: th.Tensor, ratio: float, use_slerp: bool) -> 
                      th.sin(ratio*omega) * p2) / th.sin(omega)
 
     return noise
+
+#
+# Evaluation
+#
 
 
 @ th.no_grad()

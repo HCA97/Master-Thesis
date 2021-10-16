@@ -78,6 +78,7 @@ class NoiseLayer(nn.Module):
 
 
 class AdaIN(nn.Module):
+    """Adaptive Instance Normalization according to MUNIT"""
 
     def __init__(self):
         super().__init__()

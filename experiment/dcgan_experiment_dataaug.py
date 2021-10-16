@@ -17,8 +17,10 @@ contrast = [1, 1.25]
 hue = [-0.1, 0.1]
 
 # POTSDAM CARS
-generator_params = {"n_layers": 4, "init_channels": 512}
-discriminator_params = {"base_channels": 32, "n_layers": 4}
+generator_params = {"n_layers": 4, "init_channels": 512,
+                    "bn_mode": "default", "act": "leakyrelu"}
+discriminator_params = {"base_channels": 32,
+                        "n_layers": 4, "bn_mode": "default"}
 use_gp = False
 img_dim = (3, 32, 64)
 

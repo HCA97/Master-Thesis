@@ -26,7 +26,7 @@ results_dir = "/scratch/s7hialtu/big_image"
 interval = 25
 
 if not os.path.isdir(data_dir):
-    data_dir = "../potsdam_data/potsdam_cars"
+    data_dir = "../potsdam_data/potsdam_cars_all"
     results_dir = "logs"
 
 # data aug
