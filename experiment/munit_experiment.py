@@ -144,5 +144,5 @@ for transform1, transform2 in transforms_:
 
 
 file_name = os.path.basename(__file__)
-copyfile(file_name,
+copyfile(os.path.join("experiment", file_name),
          os.path.join(results_dir, file_name))

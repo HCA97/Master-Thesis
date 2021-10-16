@@ -12,41 +12,26 @@ from scripts.dataloader import *
 from scripts.callbacks import *
 
 # POTSDAM CARS
-generator_params = [{"n_layers": 4,
-                     "init_channels": 512,
-                     "bn_mode": "default",
-                     "act": "leakyrelu",
-                     "last_layer_kernel_size": 3},
-                    {"n_layers": 4,
-                     "init_channels": 512,
-                     "padding_mode": "reflect",
-                     "bn_mode": "default",
-                     "act": "leakyrelu",
-                     "last_layer_kernel_size": 3},
-                    {"n_layers": 4,
-                     "init_channels": 512,
-                     "padding_mode": "reflect",
-                     "bn_mode": "default",
-                     "act": "leakyrelu",
-                     "last_layer_kernel_size": 3}]
+generator_param = {"n_layers": 4,
+                   "init_channels": 512,
+                   "bn_mode": "default",
+                   "act": "leakyrelu",
+                   "last_layer_kernel_size": 3}
 discriminator_params = [{"base_channels": 64,
                         "n_layers": 4,
                          "bn_mode": "default"},
                         {"base_channels": 64,
                          "padding_mode": "reflect",
                          "n_layers": 4,
-                         "bn_mode": "default"},
-                        {"base_channels": 64,
-                         "padding_mode": "reflect",
-                         "n_layers": 4,
                          "bn_mode": "default"}]
 
-use_lr_schedulers = [False]
+use_weight_decay = [False, True]
+use_lr_scheduler = [False, False]
 
 img_dim = (3, 32, 64)
 batch_size = 64
-max_epochs = 1000
-interval = 25
+max_epochs = 18000
+interval = 900
 
 data_dir = "/scratch/s7hialtu/potsdam_cars_100"
 results_dir = "/scratch/s7hialtu/dcgan_experiments_100"
@@ -64,7 +49,7 @@ transform = transforms.Compose([transforms.Resize(img_dim[1:]),
                                     hue=[-0.1, 0.1], contrast=[1, 1.25]),
                                 transforms.Normalize([0.5], [0.5])])
 
-for generator_param, discriminator_param, use_lr_scheduler in zip(generator_params, discriminator_params, use_lr_schedulers):
+for discriminator_param, use_weight_decay, use_lr_scheduler in zip(discriminator_params, use_weight_decay, use_lr_scheduler):
 
     model = GAN(img_dim,
                 discriminator_params=discriminator_param,
@@ -72,7 +57,9 @@ for generator_param, discriminator_param, use_lr_scheduler in zip(generator_para
                 generator_params=generator_param,
                 gen_model="basic",
                 fid_interval=-1,
-                use_lr_scheduler=use_lr_scheduler)
+                use_lr_scheduler=use_lr_scheduler,
+                weight_decay_gen=1e-3 if use_weight_decay else 0,
+                weight_decay_disc=1e-3 if use_weight_decay else 0)
 
     potsdam = PostdamCarsDataModule(data_dir,
                                     img_size=img_dim[1:],
@@ -87,8 +74,6 @@ for generator_param, discriminator_param, use_lr_scheduler in zip(generator_para
             interpolate_epoch_interval=interval, num_samples=10),
         ShowWeights(),
         ModelCheckpoint(period=interval, save_top_k=-1, filename="{epoch}"),
-        #EarlyStopping(monitor="fid", patience=10*interval, mode="min"),
-        #MyEarlyStopping(300, threshold=5, monitor="fid", mode="min")
     ]
 
     # Apparently Trainer has logger by default
