@@ -4,6 +4,7 @@ import torch as th
 import numpy as np
 from pytorch_lightning import Callback, LightningModule, Trainer
 from torch import Tensor
+import torchvision
 
 from .utility import interpolate
 

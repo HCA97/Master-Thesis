@@ -110,12 +110,12 @@ class GAN(pl.LightningModule):
         opt_disc = th.optim.Adam(
             self.discriminator.parameters(),
             lr=self.hparams.learning_rate_disc,
-            weight_decay=weight_decay_disc,
+            weight_decay=self.hparams.weight_decay_disc,
             betas=self.hparams.betas)
         opt_gen = th.optim.Adam(
             self.generator.parameters(),
             lr=self.hparams.learning_rate_gen,
-            weight_decay=weight_decay_gen,
+            weight_decay=self.hparams.weight_decay_gen,
             betas=self.hparams.betas)
 
         # scheduler - patience is 125 epochs
@@ -134,7 +134,7 @@ class GAN(pl.LightningModule):
     def training_step(self, batch, batch_idx, optimizer_idx):
         real, fake = batch
 
-        if hparams_initial.fid_interval > 0:
+        if self.hparams.fid_interval > 0:
             # append real image activation for FID computation
             if len(self.act_real) < self.n_samples:
                 act = np.squeeze(vgg16_get_activation_maps(
