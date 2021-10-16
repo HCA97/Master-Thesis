@@ -72,7 +72,7 @@ class PCAGenerator(nn.Module):
 
     def forward(self, z):
         l1 = z.matmul(self.E) + self.mu
-        l1 = l1.view(1 if len(z) == self.latent_dim else len(z),
+        l1 = l1.view(1 if len(z.shape) < 2 else len(z),
                      self.generator.init_channels,
                      self.generator.init_height,
                      self.generator.init_width)
@@ -544,7 +544,7 @@ class MUNITDecoder(nn.Module):
         elif act == "leakyrelu":
             self.act = nn.LeakyReLU(0.2, inplace=True)
 
-    def forward(self, c, s):
+    def forward(self, c, s, return_before_rgb=False):
 
         for mlp1, mlp2, conv1, conv2 in zip(self.mlps1, self.mlps2, self.resblocks1, self.resblocks2):
             x = conv1(c)
@@ -557,10 +557,14 @@ class MUNITDecoder(nn.Module):
             x = self.ad(x, y)
             c = self.act(x + c)
 
-        # print(c.shape)
-
-        x = self.upsample(c)
-        # print(x.shape)
+        if not return_before_rgb:
+            x = self.upsample(c)
+        else:
+            x = c
+            for i, layer in enumerate(self.upsample):
+                if i == 4:
+                    break
+                x = layer(x)
         return x
 
 

@@ -134,11 +134,12 @@ class GAN(pl.LightningModule):
 
         # scheduler - patience is 125 epochs
         # pytorch lighting is annoying
-        patience = 125 // self.hparams.fid_interval
-        self.scheduler_disc = ReduceLROnPlateau(
-            opt_disc, 'min', patience=patience, factor=0.5, verbose=True)
-        self.scheduler_gen = ReduceLROnPlateau(
-            opt_gen, 'min', patience=patience, factor=0.5, verbose=True)
+        if self.hparams.fid_interval > 0:
+            patience = 125 // self.hparams.fid_interval
+            self.scheduler_disc = ReduceLROnPlateau(
+                opt_disc, 'min', patience=patience, factor=0.5, verbose=True)
+            self.scheduler_gen = ReduceLROnPlateau(
+                opt_gen, 'min', patience=patience, factor=0.5, verbose=True)
         return [opt_disc, opt_gen], []
 
     def forward(self, tensor: th.Tensor, **kwargs) -> th.Tensor:
@@ -277,7 +278,8 @@ class GAN(pl.LightningModule):
 
     def on_epoch_end(self):
 
-        if ((self.current_epoch + 1) % self.hparams.fid_interval == 0 or self.current_epoch == 0) and len(self.gen_input) >= self.n_samples:
+        if ((self.current_epoch + 1) % self.hparams.fid_interval == 0 or self.current_epoch == 0) and \
+                len(self.gen_input) >= self.n_samples and self.hparams.fid_interval > 0:
 
             self.generator.eval()
 
