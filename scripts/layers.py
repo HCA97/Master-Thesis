@@ -241,7 +241,9 @@ class ConvBlock(nn.Module):
                 raise NotImplementedError(f"{act} is not implemented.")
 
             if dropout:
-                self.conv_block.append(nn.Dropout2d(0.25))
+                ratio = min(1, max(dropout, 0)) if type(
+                    dropout) == float else 0.25
+                self.conv_block.append(nn.Dropout2d(ratio))
 
     def forward(self, x):
         for layer in self.conv_block:

@@ -2,7 +2,7 @@ import copy
 import pytorch_lightning as pl
 import torch as th
 import torch.nn as nn
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR
 import lpips
 import numpy as np
 
@@ -120,13 +120,19 @@ class GAN(pl.LightningModule):
 
         # scheduler - patience is 125 epochs
         # pytorch lighting is annoying
+        lr_scheduler = []
         if self.hparams.fid_interval > 0:
             patience = 125 // self.hparams.fid_interval
             self.scheduler_disc = ReduceLROnPlateau(
                 opt_disc, 'min', patience=patience, factor=0.5, verbose=True)
             self.scheduler_gen = ReduceLROnPlateau(
                 opt_gen, 'min', patience=patience, factor=0.5, verbose=True)
-        return [opt_disc, opt_gen], []
+        else:
+            self.scheduler_disc = StepLR(opt_disc, step_size=10000, gamma=0.5)
+            self.scheduler_gen = StepLR(opt_gen, step_size=10000, gamma=0.5)
+
+            lr_scheduler = [self.scheduler_disc, self.scheduler_gen]
+        return [opt_disc, opt_gen], lr_scheduler
 
     def forward(self, tensor: th.Tensor, **kwargs) -> th.Tensor:
         return self.generator(tensor)
