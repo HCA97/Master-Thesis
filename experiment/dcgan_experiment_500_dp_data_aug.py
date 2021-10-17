@@ -39,14 +39,14 @@ max_epochs = 4625
 interval = 185
 
 data_dir = "/scratch/s7hialtu/potsdam_cars_500"
-results_dir = "/scratch/s7hialtu/dcgan_experiments_500"
+results_dir = "/scratch/s7hialtu/dcgan_experiments_500_dp_data_aug"
 
 if not os.path.isdir(data_dir):
     data_dir = "../potsdam_data/potsdam_cars_500"
     results_dir = "logs"
 
 # DATA AUG FOR
-transforms = [transforms.Compose([transforms.Resize(img_dim[1:]),
+transforms_ = [transforms.Compose([transforms.Resize(img_dim[1:]),
                                   transforms.ToTensor(),
                                   transforms.RandomHorizontalFlip(p=0.5),
                                   transforms.RandomVerticalFlip(p=0.5),
@@ -54,7 +54,7 @@ transforms = [transforms.Compose([transforms.Resize(img_dim[1:]),
                                       hue=[-0.1, 0.1], contrast=[1, 1.25]),
                                   transforms.Normalize([0.5], [0.5])]),
 
-              transforms.Compose([transforms.Resize(img_dim[1:]),
+               transforms.Compose([transforms.Resize(img_dim[1:]),
                                   transforms.ToTensor(),
                                   transforms.RandomHorizontalFlip(p=0.5),
                                   transforms.RandomVerticalFlip(p=0.5),
@@ -62,16 +62,16 @@ transforms = [transforms.Compose([transforms.Resize(img_dim[1:]),
                                       hue=[-0.2, 0.2], contrast=[1, 1.25]),
                                   transforms.Normalize([0.5], [0.5])]),
 
-              transforms.Compose([transforms.Resize(img_dim[1:]),
+               transforms.Compose([transforms.Resize(img_dim[1:]),
                                   transforms.ToTensor(),
                                   transforms.RandomHorizontalFlip(p=0.5),
                                   transforms.RandomVerticalFlip(p=0.5),
                                   transforms.ColorJitter(
                                       hue=[-0.2, 0.2], contrast=[1, 1.25]),
                                   transforms.Normalize([0.5], [0.5])])
-              ]
+               ]
 
-for discriminator_param, transforms in zip(discriminator_params, transforms):
+for discriminator_param, transform in zip(discriminator_params, transforms_):
 
     model = GAN(img_dim,
                 discriminator_params=discriminator_param,
