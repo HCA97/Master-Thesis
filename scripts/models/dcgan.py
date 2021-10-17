@@ -214,8 +214,11 @@ class GAN(pl.LightningModule):
 
     def on_epoch_end(self):
 
+        fid = 1e4
+
         if ((self.current_epoch + 1) % self.hparams.fid_interval == 0 or self.current_epoch == 0) and \
-                len(self.gen_input) >= self.n_samples and self.hparams.fid_interval > 0:
+            len(self.gen_input) >= self.n_samples and len(self.act_real) >= self.n_samples and \
+                self.hparams.fid_interval > 0:
 
             self.generator.eval()
 
@@ -240,15 +243,15 @@ class GAN(pl.LightningModule):
             # compute fid
             fid = fid_score(self.act_real, act_fake, skip_vgg=True)
 
-            # log fid
-            self.log("fid", fid)
-
             # lr scheduler
             # is this correct place to update?
             if self.hparams.use_lr_scheduler:
                 sch1, sch2 = self.lr_schedulers()
                 sch1.step(fid)
                 sch2.step(fid)
+
+        # log fid
+        self.log("fid", fid)
 
         # log lr
         opt1, opt2 = self.optimizers(use_pl_optimizer=True)
