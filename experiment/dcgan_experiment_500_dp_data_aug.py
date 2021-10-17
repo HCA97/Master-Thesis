@@ -36,7 +36,7 @@ discriminator_params = [{"base_channels": 64,
 img_dim = (3, 32, 64)
 batch_size = 64
 max_epochs = 4625
-interval = 185
+interval = 1
 
 data_dir = "/scratch/s7hialtu/potsdam_cars_500"
 results_dir = "/scratch/s7hialtu/dcgan_experiments_500_dp_data_aug"

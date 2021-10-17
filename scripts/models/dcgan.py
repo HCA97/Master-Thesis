@@ -219,7 +219,7 @@ class GAN(pl.LightningModule):
     def on_epoch_end(self):
 
         if len(self.gen_input) < self.n_samples or len(self.act_real) < self.n_samples:
-            fid = 1e4
+            self.log("fid", 1e4)
 
         if ((self.current_epoch + 1) % self.hparams.fid_interval == 0 or self.current_epoch == 0) and \
             len(self.gen_input) >= self.n_samples and len(self.act_real) >= self.n_samples and \
@@ -255,8 +255,8 @@ class GAN(pl.LightningModule):
                 sch1.step(fid)
                 sch2.step(fid)
 
-        # log fid
-        self.log("fid", fid)
+            # log fid
+            self.log("fid", fid)
 
         # log lr
         opt1, opt2 = self.optimizers(use_pl_optimizer=True)
