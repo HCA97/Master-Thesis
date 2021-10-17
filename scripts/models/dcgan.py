@@ -158,6 +158,8 @@ class GAN(pl.LightningModule):
         # Train discriminator
         if optimizer_idx == 0:
 
+            # apply additional data augmentation
+
             # Loss
             real_pred = self.discriminator(real)
             real_loss = compute_loss(real_pred, 1, self.criterion)
@@ -198,6 +200,8 @@ class GAN(pl.LightningModule):
                 symmetry_loss = self.hparams.gamma * \
                     th.mean(th.abs(fake_1 - fake_2))
 
+            # apply aditional data augmentation
+
             # Gen Loss
             fake_pred = self.discriminator(fake_)
             gen_loss = compute_loss(fake_pred, 1, self.criterion)
@@ -214,7 +218,8 @@ class GAN(pl.LightningModule):
 
     def on_epoch_end(self):
 
-        fid = 1e4
+        if len(self.gen_input) < self.n_samples or len(self.act_real) < self.n_samples:
+            fid = 1e4
 
         if ((self.current_epoch + 1) % self.hparams.fid_interval == 0 or self.current_epoch == 0) and \
             len(self.gen_input) >= self.n_samples and len(self.act_real) >= self.n_samples and \

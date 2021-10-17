@@ -1,5 +1,7 @@
 from typing import Tuple, List, Union
 import math
+import os
+import re
 
 import numpy as np
 import tqdm
@@ -10,6 +12,20 @@ import lpips
 
 import PIL
 import cv2
+
+
+def get_epoch_number(checkpoint_path):
+
+    exp = r"epoch=([0-9]+)"
+
+    epochs = []
+    for epoch in os.listdir(checkpoint_path):
+        m = re.search(exp, epoch)
+        if m:
+            epochs.append(int(m.groups()[0]))
+    epochs.sort()
+    return epochs
+
 
 #
 # Transformations
