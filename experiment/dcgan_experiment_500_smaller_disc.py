@@ -18,20 +18,11 @@ generator_param = {"n_layers": 4,
                    "act": "leakyrelu",
                    "padding_mode": "reflect",
                    "last_layer_kernel_size": 3}
-discriminator_params = [{"base_channels": 64,
-                        "n_layers": 4,
-                         "use_dropout": 0.5,
-                         "padding_mode": "reflect",
-                         "bn_mode": "default"},
-                        {"base_channels": 64,
-                        "n_layers": 4,
-                         "use_dropout": 0.5,
-                         "padding_mode": "reflect",
-                         "bn_mode": "default"},
-                        {"base_channels": 64,
-                         "padding_mode": "reflect",
-                         "n_layers": 4,
-                         "bn_mode": "default"}]
+discriminator_params = [
+    {"base_channels": 32,
+     "padding_mode": "reflect",
+     "n_layers": 4,
+     "bn_mode": "default"}]
 
 img_dim = (3, 32, 64)
 batch_size = 64
