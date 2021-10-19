@@ -14,6 +14,79 @@ import PIL
 import cv2
 
 
+class AugmentPipe(th.nn.Module):
+    def __init__(self, alpha=0.1, cutout=8, p=0):
+        super().__init__()
+        self.alpha = alpha
+        self.cutout = cutout
+        self.p = p
+
+    def forward(self, tensor):
+
+        p = self.p
+        cutout = self.cutout
+
+        batch_size = len(tensor)
+
+        if p > 0:
+            # noise
+            noise = th.normal(0, 1, tensor.shape, device=tensor.device)
+            noise = 2*(noise - th.min(noise)) / \
+                (th.max(noise) - th.min(noise)) - 1
+            idx_noise = np.random.choice(
+                batch_size, int(batch_size*p), replace=False)
+            alpha = th.zeros([batch_size, 1, 1, 1], device=tensor.device)
+            alpha[idx_noise] = self.alpha
+            tensor = (1 - alpha)*tensor + alpha*noise
+
+            # cutout
+            w, h = tensor.shape[-2:]
+
+            if cutout < w and cutout < h:
+                c_w = np.random.choice(w - cutout, batch_size)
+                c_h = np.random.choice(h - cutout, batch_size)
+
+                idx_cutout = np.random.choice(
+                    batch_size, int(batch_size*p), replace=False)
+
+                mask = th.ones_like(tensor, device=tensor.device)
+                for idx in idx_cutout:
+                    cw, ch = c_w[idx], c_h[idx]
+                    mask[idx, :, cw:cw+cutout, ch:ch+cutout] = 0
+                tensor = tensor * mask
+        return tensor
+
+
+def data_augmentation(tensor, alpha=0.1, cutout=8, p=0):
+
+    batch_size = len(tensor)
+
+    if p > 0:
+        # noise
+        noise = th.normal(0, 1, tensor.shape, device=tensor.device)
+        noise = 2*(noise - th.min(noise)) / (th.max(noise) - th.min(noise)) - 1
+        idx_noise = np.random.choice(
+            batch_size, int(batch_size*p), replace=False)
+        tensor[idx_noise] = (1 - alpha)*tensor[idx_noise] + \
+            alpha*noise[idx_noise]
+
+        # cutout
+        w, h = tensor.shape[-2:]
+
+        if cutout < w and cutout < h:
+            c_w = np.random.choice(w - cutout, batch_size)
+            c_h = np.random.choice(h - cutout, batch_size)
+
+            idx_cutout = np.random.choice(
+                batch_size, int(batch_size*p), replace=False)
+
+            for idx in idx_cutout:
+                cw, ch = c_w[idx], c_h[idx]
+                tensor[idx, :, cw:cw+cutout, ch:ch+cutout] = 0 * \
+                    tensor[idx, :, cw:cw+cutout, ch:ch+cutout]
+    return tensor
+
+
 def get_epoch_number(checkpoint_path):
 
     exp = r"epoch=([0-9]+)"

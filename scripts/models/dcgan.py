@@ -43,6 +43,8 @@ class GAN(pl.LightningModule):
                  # GAN Loss
                  use_symmetry_loss=False,
                  gamma=1,
+                 # Adaptive Data Aug
+                 p=0,
                  **kwargs):
 
         super().__init__()
@@ -51,6 +53,9 @@ class GAN(pl.LightningModule):
         self.generator = self.get_generator(generator_params)
         self.discriminator = self.get_discriminator(discriminator_params)
         self.criterion = self.get_criterion()
+
+        # Adaptive Data Aug
+        self.aug = AugmentPipe(0.1, 16, p)
 
         # for FID score computation
         self.n_samples = 1024
@@ -138,7 +143,7 @@ class GAN(pl.LightningModule):
         return self.generator(tensor)
 
     def training_step(self, batch, batch_idx, optimizer_idx):
-        real, fake = batch
+        real, _ = batch
 
         if self.hparams.fid_interval > 0:
             # append real image activation for FID computation
@@ -159,6 +164,7 @@ class GAN(pl.LightningModule):
         if optimizer_idx == 0:
 
             # apply additional data augmentation
+            real = self.aug(real)
 
             # Loss
             real_pred = self.discriminator(real)
@@ -168,6 +174,9 @@ class GAN(pl.LightningModule):
             z = th.normal(0, 1, size=(
                 len(real), self.generator.latent_dim), device=self.device)
             fake_ = self.generator(z)
+
+            # apply additional data augmentation
+            fake_ = self.aug(fake_)
 
             # Loss
             fake_pred = self.discriminator(fake_)
@@ -200,7 +209,8 @@ class GAN(pl.LightningModule):
                 symmetry_loss = self.hparams.gamma * \
                     th.mean(th.abs(fake_1 - fake_2))
 
-            # apply aditional data augmentation
+            # apply additional data augmentation
+            fake_ = self.aug(fake_)
 
             # Gen Loss
             fake_pred = self.discriminator(fake_)

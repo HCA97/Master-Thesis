@@ -62,43 +62,42 @@ transforms_ = [transforms.Compose([transforms.Resize(img_dim[1:]),
                                   transforms.Normalize([0.5], [0.5])])
                ]
 
-for discriminator_param, transform in zip(discriminator_params, transforms_):
 
-    model = GAN(img_dim,
-                discriminator_params=discriminator_param,
-                disc_model="basic",
-                generator_params=generator_param,
-                gen_model="basic",
-                fid_interval=interval)
+model = GAN(img_dim,
+            discriminator_params=discriminator_param,
+            disc_model="basic",
+            generator_params=generator_param,
+            gen_model="basic",
+            fid_interval=interval)
 
-    potsdam = PostdamCarsDataModule(data_dir,
-                                    img_size=img_dim[1:],
-                                    batch_size=batch_size,
-                                    transform=transform)
-    potsdam.setup()
+potsdam = PostdamCarsDataModule(data_dir,
+                                img_size=img_dim[1:],
+                                batch_size=batch_size,
+                                transform=transform)
+potsdam.setup()
 
-    callbacks = [
-        TensorboardGeneratorSampler(
-            epoch_interval=interval, num_samples=64, normalize=True),
-        LatentDimInterpolator(
-            interpolate_epoch_interval=interval, num_samples=10),
-        ShowWeights(),
-        ModelCheckpoint(period=interval, save_top_k=-1, filename="{epoch}"),
-        EarlyStopping(monitor="fid", patience=10*interval, mode="min"),
-        ShowWeights(),
-        MyEarlyStopping(3000, threshold=5, monitor="fid", mode="min")
-    ]
+callbacks = [
+    TensorboardGeneratorSampler(
+        epoch_interval=interval, num_samples=64, normalize=True),
+    LatentDimInterpolator(
+        interpolate_epoch_interval=interval, num_samples=10),
+    ShowWeights(),
+    ModelCheckpoint(period=interval, save_top_k=-1, filename="{epoch}"),
+    EarlyStopping(monitor="fid", patience=10*interval, mode="min"),
+    ShowWeights(),
+    MyEarlyStopping(3000, threshold=5, monitor="fid", mode="min")
+]
 
-    # Apparently Trainer has logger by default
-    trainer = pl.Trainer(default_root_dir=results_dir,
-                         gpus=1,
-                         max_epochs=max_epochs,
-                         callbacks=callbacks,
-                         progress_bar_refresh_rate=20)
-    try:
-        trainer.fit(model, datamodule=potsdam)
-    except KeyboardInterrupt:
-        pass
+# Apparently Trainer has logger by default
+trainer = pl.Trainer(default_root_dir=results_dir,
+                     gpus=1,
+                     max_epochs=max_epochs,
+                     callbacks=callbacks,
+                     progress_bar_refresh_rate=20)
+try:
+    trainer.fit(model, datamodule=potsdam)
+except KeyboardInterrupt:
+    pass
 
 file_name = os.path.basename(__file__)
 copyfile(os.path.join("experiment", file_name),
