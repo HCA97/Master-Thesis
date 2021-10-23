@@ -410,16 +410,16 @@ class BasicDiscriminator(nn.Module):
 
 
 class MUNITGEN(nn.Module):
-    def __init__(self, img_dim, base_channels=64, use_spectral_norm=True, style_dim=8, act="relu", n_layers=3, padding_mode="zeros", my_loss=False):
+    def __init__(self, img_dim, base_channels=64, use_spectral_norm=True, style_dim=8, act="relu", n_layers=3, padding_mode="zeros", my_loss=False, use_IN_in_style=True):
         super().__init__()
 
         self.encoder1 = MUNITEncoder(
-            img_dim, base_channels=base_channels, use_spectral_norm=use_spectral_norm, act=act, style_dim=style_dim, padding_mode=padding_mode, n_layers=n_layers)
+            img_dim, base_channels=base_channels, use_spectral_norm=use_spectral_norm, act=act, style_dim=style_dim, padding_mode=padding_mode, n_layers=n_layers, use_IN_in_style=use_IN_in_style)
         self.decoder1 = MUNITDecoder(
             img_dim, base_channels=base_channels, use_spectral_norm=use_spectral_norm, act=act, n_layers=n_layers, padding_mode=padding_mode)
 
         self.encoder2 = MUNITEncoder(
-            img_dim, base_channels=base_channels, use_spectral_norm=use_spectral_norm, act=act, style_dim=style_dim, n_layers=n_layers, padding_mode=padding_mode)
+            img_dim, base_channels=base_channels, use_spectral_norm=use_spectral_norm, act=act, style_dim=style_dim, n_layers=n_layers, padding_mode=padding_mode, use_IN_in_style=use_IN_in_style)
         self.decoder2 = MUNITDecoder(
             img_dim, base_channels=base_channels, use_spectral_norm=use_spectral_norm, act=act, n_layers=n_layers, padding_mode=padding_mode)
 
@@ -569,7 +569,7 @@ class MUNITDecoder(nn.Module):
 
 
 class MUNITEncoder(nn.Module):
-    def __init__(self, img_size, base_channels=64, use_spectral_norm=True, style_dim=8, act="relu", n_layers=3, padding_mode="zeros"):
+    def __init__(self, img_size, base_channels=64, use_spectral_norm=True, style_dim=8, act="relu", n_layers=3, padding_mode="zeros", use_IN_in_style=True):
         super().__init__()
 
         input_channels, input_height, input_width = img_size
@@ -616,7 +616,7 @@ class MUNITEncoder(nn.Module):
         self.style_enc = [
             ConvBlock(input_channels, base_channels,
                       kernel_size=7,
-                      use_instance_norm=True,
+                      use_instance_norm=use_IN_in_style,
                       use_bn=False,
                       padding=3,
                       act=act,
@@ -625,7 +625,7 @@ class MUNITEncoder(nn.Module):
             ConvBlock(base_channels, 2*base_channels,
                       kernel_size=4,
                       stride=2,
-                      use_instance_norm=True,
+                      use_instance_norm=use_IN_in_style,
                       use_bn=False,
                       padding=1,
                       act=act,
@@ -635,7 +635,7 @@ class MUNITEncoder(nn.Module):
                       kernel_size=4,
                       stride=2,
                       padding=1,
-                      use_instance_norm=True,
+                      use_instance_norm=use_IN_in_style,
                       use_bn=False,
                       act=act,
                       padding_mode=padding_mode,
@@ -647,7 +647,7 @@ class MUNITEncoder(nn.Module):
                       kernel_size=4,
                       stride=2,
                       padding=1,
-                      use_instance_norm=True,
+                      use_instance_norm=use_IN_in_style,
                       use_bn=False,
                       act=act,
                       padding_mode=padding_mode,

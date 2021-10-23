@@ -17,7 +17,8 @@ from scripts.callbacks import *
 # POTSDAM CARS
 generator_params = {"n_layers": 4,
                     "base_channels": 32,
-                    "padding_mode": "reflect"}
+                    "padding_mode": "reflect",
+                    "use_IN_in_style": False}
 discriminator_params = {
     "n_res": 1,
     "disc_parameters": {"base_channels": 64,
@@ -25,19 +26,19 @@ discriminator_params = {
                         "use_sigmoid": False,
                         "use_dropout": False,
                         "use_spectral_norm": True,
-                        "use_instance_norm": True,
+                        "use_instance_norm": False,
                         "n_layers": 4
                         }
 }
 
-img_dim = (3, 60, 120)
+img_dim = (3, 40, 80)
 batch_size = 64
 max_epochs = 500
 interval = 25
 
 data_dir1 = "/scratch/s7hialtu/potsdam_cars_corrected"
 data_dir2 = "/scratch/s7hialtu/training_tightcanvas_graybackground"
-results_dir = "/scratch/s7hialtu/munit_"
+results_dir = "/scratch/s7hialtu/munit_version_2_larger_image_corrected"
 
 if not os.path.isdir(data_dir1):
     data_dir1 = "../potsdam_data/potsdam_cars_corrected"

@@ -57,36 +57,6 @@ class AugmentPipe(th.nn.Module):
         return tensor
 
 
-def data_augmentation(tensor, alpha=0.1, cutout=8, p=0):
-
-    batch_size = len(tensor)
-
-    if p > 0:
-        # noise
-        noise = th.normal(0, 1, tensor.shape, device=tensor.device)
-        noise = 2*(noise - th.min(noise)) / (th.max(noise) - th.min(noise)) - 1
-        idx_noise = np.random.choice(
-            batch_size, int(batch_size*p), replace=False)
-        tensor[idx_noise] = (1 - alpha)*tensor[idx_noise] + \
-            alpha*noise[idx_noise]
-
-        # cutout
-        w, h = tensor.shape[-2:]
-
-        if cutout < w and cutout < h:
-            c_w = np.random.choice(w - cutout, batch_size)
-            c_h = np.random.choice(h - cutout, batch_size)
-
-            idx_cutout = np.random.choice(
-                batch_size, int(batch_size*p), replace=False)
-
-            for idx in idx_cutout:
-                cw, ch = c_w[idx], c_h[idx]
-                tensor[idx, :, cw:cw+cutout, ch:ch+cutout] = 0 * \
-                    tensor[idx, :, cw:cw+cutout, ch:ch+cutout]
-    return tensor
-
-
 def get_epoch_number(checkpoint_path):
 
     exp = r"epoch=([0-9]+)"
