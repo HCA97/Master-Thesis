@@ -33,7 +33,7 @@ discriminator_params = {
 
 img_dim = (3, 40, 80)
 batch_size = 64
-max_epochs = 500
+max_epochs = 1000
 interval = 25
 
 data_dir1 = "/scratch/s7hialtu/potsdam_cars_corrected"
@@ -71,14 +71,16 @@ transform2 = transforms.Compose([transforms.ColorJitter(hue=[-0.1, 0.1]),
                                  transforms.Normalize([0.5], [0.5]),
                                  AddNoise(alpha=0.07)])
 
+learning_rate_gen = 0.0001
+learning_rate_disc = 0.0004
 
 model = MUNIT(img_dim,
               discriminator_params=discriminator_params,
               generator_params=generator_params,
               gen_init="kaiming",
               disc_model="basic",
-              learning_rate_gen=0.0001,
-              learning_rate_disc=0.0004,
+              learning_rate_gen=learning_rate_gen,
+              learning_rate_disc=learning_rate_disc,
               weight_decay_disc=1e-3,
               weight_decay_gen=1e-3,
               use_lr_scheduler=True,
@@ -92,19 +94,15 @@ potsdam = PostdamCarsDataModule(
 potsdam.setup()
 
 callbacks = [
-    TensorboardGeneratorSampler(
-        epoch_interval=interval, num_samples=batch_size, normalize=True),
-    LatentDimInterpolator(
-        interpolate_epoch_interval=interval, num_samples=10),
     ModelCheckpoint(period=interval, save_top_k=-1, filename="{epoch}"),
     MUNITCallback(epoch_interval=interval),
-    Pix2PixCallback(epoch_interval=interval),
     ShowWeights()
 ]
 
 # Apparently Trainer has logger by default
 trainer = pl.Trainer(default_root_dir=results_dir, gpus=1, max_epochs=max_epochs,
-                     callbacks=callbacks, progress_bar_refresh_rate=1)
+                     callbacks=callbacks, progress_bar_refresh_rate=1,
+                     resume_from_checkpoint=os.path.join(results_dir, "lightning_logs/version_0/checkpoints/epoch=449.ckpt"))
 try:
     trainer.fit(model, datamodule=potsdam)
 except KeyboardInterrupt:
