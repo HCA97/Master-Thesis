@@ -26,7 +26,7 @@ matplotlib.rcParams.update({
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
-        "Evaluation script for DCGAN and PIX2PIX. Make sure you run `generate_examples.py` first")
+        "Evaluation script for DCGAN and MUNIT")
     parser.add_argument("experiment_dir", help="experiment folder")
     parser.add_argument(
         "--potsdam_train_dir", default="../potsdam_data/potsdam_cars_corrected", help="path to potsdam training cars")
@@ -97,12 +97,30 @@ if __name__ == "__main__":
                             transforms.RandomHorizontalFlip(p=0.5),
                             transforms.RandomVerticalFlip(p=0.5),
                             transforms.ToTensor(),
+                            transforms.Normalize([0.5], [0.5])]),
+        # Heavy Data Aug
+        transforms.Compose([transforms.ColorJitter(hue=[-0.2, 0.2], contrast=(1, 1.2)),
+                            DynamicPad(min_img_dim=(128, 64),
+                                       padding_mode="edge"),
+                            transforms.RandomAffine(degrees=10,
+                                                    translate=(
+                                                        0.075, 0.075),
+                                                    scale=(1, 1.2),
+                                                    shear=(
+                                                        -3, 3, -3, 3),
+                                                    interpolation=PIL.Image.BICUBIC,
+                                                    fill=100),
+                            transforms.RandomAdjustSharpness(2, p=0.5),
+                            transforms.Resize((64, 128)),
+                            transforms.RandomHorizontalFlip(p=0.5),
+                            transforms.RandomVerticalFlip(p=0.5),
+                            transforms.ToTensor(),
                             transforms.Normalize([0.5], [0.5])])
     ]
 
-    # checkpoints
-    checkpoints = [
-        i-1 for i in range(args.interval, max_epochs, args.interval)] + [max_epochs-1]
+    # # checkpoints
+    # checkpoints = get_epoch_number(os.path.join(
+    #     args.experiment_dir, version, args.results_name, "images"))
 
     # data loaders
     dataset = ImageFolder(args.potsdam_train_dir,
@@ -128,6 +146,9 @@ if __name__ == "__main__":
 
         if os.path.isfile(os.path.join(args.experiment_dir, version)):
             continue
+
+        checkpoints = get_epoch_number(os.path.join(
+            args.experiment_dir, version, args.results_name, "images"))
 
         print(f"[FAKE] Loading {version}")
         # evaluation
@@ -178,6 +199,8 @@ if __name__ == "__main__":
         plt.tight_layout()
         plt.savefig(os.path.join(args.experiment_dir, version,
                     args.results_name, "fid_score_train.pgf"))
+        plt.savefig(os.path.join(args.experiment_dir, version,
+                    args.results_name, "fid_score_train.png"))
         # close everything, i don't know how important it is
         plt.clf()
         plt.close()

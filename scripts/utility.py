@@ -375,6 +375,7 @@ def perceptual_path_length(generator, n_samples=1024, epsilon=1e-4, use_slerp=Tr
                             device=device)
 
             ratio = np.random.uniform(0, 1)
+            # ratio = 1 - 2*epsilon if ratio > 0.5 else 0 # only at the ends
             z1[i, :] = interpolate(z1_, z2_, ratio=ratio,
                                    use_slerp=use_slerp)
             z2[i, :] = interpolate(z1_, z2_, ratio=min(

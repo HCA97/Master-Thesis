@@ -41,7 +41,7 @@ data_dir2 = "/scratch/s7hialtu/training_tightcanvas_graybackground"
 results_dir = "/scratch/s7hialtu/munit_version_2_larger_image_corrected_500"
 
 if not os.path.isdir(data_dir1):
-    data_dir1 = "../potsdam_data/potsdam_cars_corrected"
+    data_dir1 = "../potsdam_data/potsdam_cars_500"
     data_dir2 = "../potsdam_data/cem-v0/v2/training_tightcanvas_graybackground"
     results_dir = "logs"
 

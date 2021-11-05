@@ -42,24 +42,22 @@ if __name__ == "__main__":
     # for interpolation between points
     interpolate = LatentDimInterpolator(num_samples=10, steps=step)
 
-    # checkpoints
-    checkpoints = [
-        i-1 for i in range(interval, max_epochs, interval)] + [max_epochs-1]
-
     for version in os.listdir(os.path.join(experiment_dir, "lightning_logs")):
 
         print(f"Version : {version}")
 
         # paths
         checkpoint_path = os.path.join(
-            experiment_dir, "lightning_logs", version, "checkpoints", "epoch={}.ckpt")
+            experiment_dir, "lightning_logs", version, "checkpoints")
+        checkpoints = get_epoch_number(checkpoint_path)
+
         results_dir = os.path.join(experiment_dir, version, results_name)
         os.makedirs(results_dir, exist_ok=True)
 
         # main stuff
         with th.no_grad():
             for epoch in tqdm.tqdm(checkpoints, desc="Checkpoints"):
-                path = checkpoint_path.format(epoch)
+                path = os.path.join(checkpoint_path, f"epoch={epoch}.ckpt")
                 if os.path.exists(path):
                     # load model
                     model = GAN.load_from_checkpoint(path)

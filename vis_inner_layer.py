@@ -15,23 +15,6 @@ FIG_DIM = {1024: (12, 6), 512: (12, 6), 256: (
     12, 8), 128: (12, 6), 64: (12, 8), 32: (12, 6), 16: (12, 6)}
 
 
-def plot_layer_disc(out, layer_i, save_dir):
-    out = out.detach().cpu().clone().permute(1, 0, 2, 3)
-    grid = torchvision.utils.make_grid(
-        out, nrow=NUM_ROWS[out.shape[0]], padding=1, normalize=True, pad_value=1).numpy().transpose((1, 2, 0))
-
-    plt.figure(figsize=FIG_DIM[out.shape[0]])
-    # plt.title(f"Discriminator Layer {layer_i+1}", fontsize=20)
-    plt.imshow(grid)
-    plt.tight_layout()
-    plt.axis("off")
-    plt.savefig(os.path.join(save_dir, f"disc_layer_{layer_i+1}.png"))
-
-    # close everything, i don't know how important it is
-    plt.clf()
-    plt.close()
-
-
 def plot_layer(out, layer_i, save_dir, which_one):
     out = out.detach().cpu().clone().permute(1, 0, 2, 3)
     grid = torchvision.utils.make_grid(
@@ -180,15 +163,12 @@ if __name__ == "__main__":
     parser.add_argument("checkpoint_dir", help="path to DCGAN checkpoint")
     parser.add_argument(
         "--data_dir", default="../potsdam_data/potsdam_cars_corrected", help="path to real cars directory")
-    parser.add_argument("--artificial_dir",
-                        default="../potsdam_data/artificial_cars", help="path to artificial cars")
     parser.add_argument("--n_samples", default=10,
                         type=int, help="number of samples")
     args = parser.parse_args()
 
     checkpoint_path = args.checkpoint_dir
     data_dir = args.data_dir
-    artificial_dir = args.artificial_dir
     save_dir = args.save_dir
     n_samples = args.n_samples
 
@@ -198,7 +178,7 @@ if __name__ == "__main__":
 
     # data loader
     potsdam = PostdamCarsDataModule(
-        data_dir, data_dir2=artificial_dir, img_size=model.hparams.img_dim[1:], batch_size=1)
+        data_dir, img_size=model.hparams.img_dim[1:], batch_size=1)
     potsdam.setup()
 
     for i in range(1, n_samples+1):

@@ -17,7 +17,7 @@ if __name__ == "__main__":
         "Generate samples from each checkpoint for MUNIT")
     parser.add_argument("experiment_dir", help="experiment folder")
     parser.add_argument(
-        "--potsdam_dir", default="../potsdam_data/potsdam_cars_all", help="path to potsdam cars")
+        "--potsdam_dir", default="../potsdam_data/potsdam_cars_corrected", help="path to potsdam cars")
     parser.add_argument(
         "--artificial_dir", default="../potsdam_data/artificial_cars", help="path to artificial cars")
     parser.add_argument("--interval", default=25, type=int,

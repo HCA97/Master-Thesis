@@ -18,7 +18,7 @@ if __name__ == "__main__":
         "Computes FID score multiple times. Make sure you run `eval_gan.py` first")
     parser.add_argument("experiment_dir", help="experiment folder")
     parser.add_argument(
-        "--potsdam_train_dir", default="../potsdam_data/potsdam_cars_all", help="path to potsdam training cars")
+        "--potsdam_train_dir", default="../potsdam_data/potsdam_cars_corrected", help="path to potsdam training cars")
     parser.add_argument(
         "--artificial_dir", default="../potsdam_data/artificial_cars", help="path to artificial cars")
     parser.add_argument("--results_name", default="results",
