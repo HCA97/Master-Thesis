@@ -15,6 +15,8 @@ import cv2
 
 
 class AugmentPipe(th.nn.Module):
+    """Adaptive Discriminator Augmentation. Only do gaussian noise and drop out."""
+
     def __init__(self, alpha=0.1, cutout=8, p=0):
         super().__init__()
         self.alpha = alpha
@@ -58,7 +60,6 @@ class AugmentPipe(th.nn.Module):
 
 
 def get_epoch_number(checkpoint_path):
-
     exp = r"epoch=([0-9]+)"
 
     epochs = []
@@ -112,78 +113,13 @@ class DynamicPad(th.nn.Module):
         return transform(img)
 
 
-class Skeleton(th.nn.Module):
-    """Applies Canny edge detection on vehicles. It is used for edge-to-car translation."""
-
-    def __init__(self, ratio=0.9, min_length=10, smooth=False, canny=True):
-        super().__init__()
-        self.ratio = max(0, min(ratio, 1))
-        self.min_length = min_length
-        self.smooth = smooth
-        self.canny = canny
-
-    def forward(self, img):
-        if type(img) != PIL.Image.Image:
-            raise RuntimeError(
-                f"Inputmust be PIL.Image but it is {type(img)}")
-
-        # read the image and convert to gray
-        img_ = np.asarray(img)
-        gray = cv2.cvtColor(img_, cv2.COLOR_RGB2GRAY)
-
-        # enhance the contrast
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        gray = clahe.apply(gray)
-
-        if self.canny:
-            if self.smooth:
-                gray = cv2.medianBlur(gray, 5)
-
-            edge = cv2.Canny(gray, 100, 200)
-
-            # remove short edges
-            cnts, _ = cv2.findContours(
-                edge, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-            cnts_ = []
-            for cnt in cnts:
-                if len(cnt) > self.min_length and np.random.uniform(0, 1) < self.ratio:
-                    cnts_.append(cnt)
-
-            # re draw the edges
-            cnt = cv2.drawContours(
-                255*np.ones_like(gray, dtype=np.uint8), cnts_, -1, 0, 1)
-        else:
-            if self.smooth:
-                gray = cv2.GaussianBlur(gray, (5, 5), 3)
-
-            edge = cv2.Laplacian(gray, cv2.CV_64F, ksize=5)
-            cnt = 255*(edge > 0.1 * np.min(edge)).astype(np.uint8)
-
-        # return PIL.Image
-        return PIL.Image.fromarray(cnt).convert('RGB')
-
 #
 # Training
 #
 
 
 def compute_loss(predictions: Union[th.Tensor, List[th.Tensor]], label: int, criteria: th.nn.Module):
-    """[summary]
-
-    Parameters
-    ----------
-    predictions : Union[th.Tensor, List[th.Tensor]]
-        [description]
-    label : int
-        [description]
-    criteria : th.nn.Module
-        [description]
-
-    Returns
-    -------
-    [type]
-        [description]
-    """
+    """Compute Loss for the discriminator and the generator from a given criteria"""
     loss = 0
     if type(predictions) == list:
         for prediction in predictions:
@@ -322,39 +258,8 @@ def vgg16_get_activation_maps(imgs: th.Tensor,
 
 @ th.no_grad()
 def perceptual_path_length(generator, n_samples=1024, epsilon=1e-4, use_slerp=True, device="cpu", truncation=1, batch_size=1024, net="vgg"):
-    """[summary]
-
-    Parameters
-    ----------
-    generator : [type]
-        [description]
-    n_samples : int, optional
-        [description], by default 1024
-    epsilon : [type], optional
-        [description], by default 1e-4
-    use_slerp : bool, optional
-        [description], by default True
-    device : str, optional
-        [description], by default "cpu"
-    batch_size : int, optional
-
-    Returns
-    -------
-    [type]
-        [description]
+    """Computes Perceptual Path Length loss proposed in Style GAN paper.
     """
-
-    # def slerp(a, b, t):
-    #     a = a / a.norm(dim=-1, keepdim=True)
-    #     b = b / b.norm(dim=-1, keepdim=True)
-    #     d = (a * b).sum(dim=-1, keepdim=True)
-    #     p = t * th.acos(d)
-    #     c = b - d * a
-    #     c = c / c.norm(dim=-1, keepdim=True)
-    #     d = a * th.cos(p) + c * th.sin(p)
-    #     d = d / d.norm(dim=-1, keepdim=True)
-    #     return d
-
     if n_samples % batch_size != 0:
         raise AttributeError(
             f"Number of samples ({n_samples}) must be divisible by batch size ({batch_size})")

@@ -27,6 +27,6 @@ docker run -u $(id -u ${USER}):$(id -g ${USER}) -p 8888:8888 -e JUPYTER_ENABLE_L
 
 ### Dataset
 
-## Experiments
+Potsdam and ARTIFIVE datasets are used.
 
-How to reproduce experiments. TODO
+## Experiments

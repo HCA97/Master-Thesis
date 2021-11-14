@@ -150,10 +150,10 @@ for param, deformation in zip(params, deformations):
             print(
                 f"Deformation {deformation} - Param {p} - LPIPS Score {score}")
 
-        # scores[deformation].append(score)
         scores.append(score)
 
     y_max = max(scores)
+    # add exemplary image
     for i, img in enumerate(images):
         imagebox = OffsetImage(img, zoom=1.5)
         ab = AnnotationBbox(
@@ -170,5 +170,6 @@ for param, deformation in zip(params, deformations):
     axis.tick_params(axis='both', which='major', labelsize=24)
     plt.tight_layout()
     plt.savefig(os.path.join(save_dir, f"{experiment}_{deformation}.pgf"))
+    plt.savefig(os.path.join(save_dir, f"{experiment}_{deformation}.png"))
     plt.clf()
     plt.close()

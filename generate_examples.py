@@ -36,8 +36,11 @@ if __name__ == "__main__":
     step = 5
     n_samples_show = 64
     gen_in = None
-    max_epochs = 1000
     bs = 256
+
+    if n_samples % bs != 0:
+        raise RuntimeError(
+            f"N samples ({n_samples}) must be divisible by batch size ({bs})")
 
     # for interpolation between points
     interpolate = LatentDimInterpolator(num_samples=10, steps=step)
@@ -71,11 +74,9 @@ if __name__ == "__main__":
                         results_dir, f"interpolation_epoch={epoch}.png")
                     samples_path = os.path.join(
                         results_dir, f"epoch={epoch}.png")
-                    diff_path = os.path.join(
-                        results_dir, f"diff_epoch={epoch}.png")
 
                     # skip to speed up the computation
-                    if os.path.exists(interpolate_path) or os.path.exists(diff_path):
+                    if os.path.exists(interpolate_path):
                         continue
 
                     os.makedirs(img_folder, exist_ok=True)
@@ -83,7 +84,7 @@ if __name__ == "__main__":
                     gen_in = th.normal(0, truncation, size=(
                         n_samples, model.generator.latent_dim), device=model.device)
 
-                    # fake imgs need to do it in batches for memory stuff
+                    # need to do it in batches for memory stuff
                     fake_imgs = []
                     for i in range((n_samples + bs) // bs):
                         si = i * bs

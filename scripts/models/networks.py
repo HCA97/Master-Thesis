@@ -14,6 +14,8 @@ from ..layers import *
 # ------------------------------------------------------- #
 
 class L2Norm(nn.Module):
+    """LSGAN Loss"""
+
     def forward(self, x1, x2):
         return th.mean((x1 - x2)**2)
 
@@ -23,6 +25,8 @@ class L2Norm(nn.Module):
 
 
 class EncoderLatent(nn.Module):
+    """For GAN Inversion"""
+
     def __init__(self, generator: nn.Module, img_dim=(3, 32, 64), base_channels=32, n_layers=4, n_blocks=1):
         super().__init__()
 
@@ -59,6 +63,8 @@ class EncoderLatent(nn.Module):
 
 
 class PCAGenerator(nn.Module):
+    """Using PCA space as our new latent space. The PCA is computed in GANSpace."""
+
     def __init__(self, generator: nn.Module, E: th.tensor, mu: th.tensor):
         super().__init__()
 
@@ -85,6 +91,7 @@ class PCAGenerator(nn.Module):
 
 
 class MultiDiscriminator(nn.Module):
+    """MUNIT Discriminator"""
 
     def __init__(self, img_size, n_res=3, disc_model="patch", disc_parameters=None):
         super().__init__()
@@ -125,6 +132,8 @@ class MultiDiscriminator(nn.Module):
 
 
 class BasicPatchDiscriminator(nn.Module):
+    """PatchGAN and DCGAN Discriminator. It creates two network."""
+
     def __init__(self,
                  img_size,
                  base_channels=64,
@@ -168,24 +177,7 @@ class BasicPatchDiscriminator(nn.Module):
 
 
 class PatchDiscriminator(nn.Module):
-    """Simple CNN no fancy layers. It is similar to the
-    https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/dcgan/dcgan.py
-
-    Parameters
-    ----------
-    img_size : list or tuple
-        Input image size (input_channels, input_height, input_width)
-    base_channels : int
-        number channels in first layer
-    n_layers : int
-        number of layers
-
-
-    References
-    ----------
-    Alec Radford and Luke Met and Soumith Chintala. 2016.
-    UNSUPERVISED REPRESENTATION LEARNING WITH DEEP CONVOLUTIONAL GENERATIVE ADVERSARIAL NETWORKS.
-    """
+    """PatchGAN Discriminator"""
 
     def __init__(self,
                  img_size,
@@ -248,6 +240,8 @@ class PatchDiscriminator(nn.Module):
 
 
 class ResNetDiscriminator(nn.Module):
+    """DCGAN Discriminator but Conv replaced by residual blocks."""
+
     def __init__(self,
                  img_size=(3, 32, 64),
                  base_channels=64,
@@ -312,8 +306,7 @@ class ResNetDiscriminator(nn.Module):
 
 
 class BasicDiscriminator(nn.Module):
-    """Simple CNN no fancy layers. It is similar to the
-    https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/dcgan/dcgan.py
+    """DCGAN Discriminator
 
     Parameters
     ----------
@@ -410,22 +403,24 @@ class BasicDiscriminator(nn.Module):
 
 
 class MUNITGEN(nn.Module):
-    def __init__(self, img_dim, base_channels=64, use_spectral_norm=True, style_dim=8, act="relu", n_layers=3, padding_mode="zeros", my_loss=False, use_IN_in_style=True):
+    """MUNIT Auto-Encoder. Consists of two auto-encoders (one for each domain)"""
+
+    def __init__(self, img_dim, base_channels=64, use_spectral_norm=True, style_dim=8, act="relu", n_layers=3, padding_mode="zeros", use_IN_in_style=True):
         super().__init__()
 
+        # Auto-Encoder 1
         self.encoder1 = MUNITEncoder(
             img_dim, base_channels=base_channels, use_spectral_norm=use_spectral_norm, act=act, style_dim=style_dim, padding_mode=padding_mode, n_layers=n_layers, use_IN_in_style=use_IN_in_style)
         self.decoder1 = MUNITDecoder(
             img_dim, base_channels=base_channels, use_spectral_norm=use_spectral_norm, act=act, n_layers=n_layers, padding_mode=padding_mode)
 
+        # Auto-Encoder 2
         self.encoder2 = MUNITEncoder(
             img_dim, base_channels=base_channels, use_spectral_norm=use_spectral_norm, act=act, style_dim=style_dim, n_layers=n_layers, padding_mode=padding_mode, use_IN_in_style=use_IN_in_style)
         self.decoder2 = MUNITDecoder(
             img_dim, base_channels=base_channels, use_spectral_norm=use_spectral_norm, act=act, n_layers=n_layers, padding_mode=padding_mode)
 
         self.style_dim = style_dim
-
-        self.my_loss = my_loss
 
     def forward(self, x1, x2, inference=False):
 
@@ -444,23 +439,6 @@ class MUNITGEN(nn.Module):
         loss_s = 0
         loss_c = 0
         loss_cyc = 0
-        if self.my_loss:
-            s11_ = th.normal(0, 1, size=(
-                x1.size(0), self.style_dim), device=x1.device)
-
-            s22_ = th.normal(0, 1, size=(
-                x2.size(0), self.style_dim), device=x2.device)
-
-            x11_ = self.decoder1(c1, s11_)
-            x22_ = self.decoder2(c2, s22_)
-
-            c11_rec, s11_rec = self.encoder1(x11_)
-            c22_rec, s22_rec = self.encoder2(x22_)
-
-            loss_s += th.mean(th.abs(s11_ - s11_rec)) + \
-                th.mean(th.abs(s22_ - s22_rec))
-            loss_c += th.mean(th.abs(c11_rec - c1.detach())) + \
-                th.mean(th.abs(c22_rec - c2.detach()))
 
         x12 = self.decoder2(c1, s1_)
         x21 = self.decoder1(c2, s2_)
@@ -472,8 +450,6 @@ class MUNITGEN(nn.Module):
         x212 = self.decoder2(c21, s2)
 
         if inference:
-            if self.my_loss:
-                return [x12, x21, x121, x212, x11, x22, x11_, x22_]
             return [x12, x21, x121, x212, x11, x22]
 
         # compute all the regularization
@@ -482,12 +458,12 @@ class MUNITGEN(nn.Module):
         loss_c += th.mean(th.abs(c12 - c1.detach())) + \
             th.mean(th.abs(c21 - c2.detach()))
         loss_cyc += th.mean(th.abs(x121 - x1)) + th.mean(th.abs(x212 - x2))
-        if self.my_loss:
-            return [x12, x21, x11_, x22_], [loss_rec, loss_s, loss_c, loss_cyc]
         return [x12, x21], [loss_rec, loss_s, loss_c, loss_cyc]
 
 
 class MUNITDecoder(nn.Module):
+    """MUNIT Decoder"""
+
     def __init__(self, img_size, base_channels=64, use_spectral_norm=True, style_dim=8, act="relu", n_layers=3, padding_mode="zeros"):
         super().__init__()
 
@@ -546,6 +522,7 @@ class MUNITDecoder(nn.Module):
 
     def forward(self, c, s, return_before_rgb=False):
 
+        # my way of AdaIN
         for mlp1, mlp2, conv1, conv2 in zip(self.mlps1, self.mlps2, self.resblocks1, self.resblocks2):
             x = conv1(c)
             y = mlp1(s)
@@ -569,10 +546,16 @@ class MUNITDecoder(nn.Module):
 
 
 class MUNITEncoder(nn.Module):
+    """MUNIT Encoder. Consists of two networks (style and content encoders)"""
+
     def __init__(self, img_size, base_channels=64, use_spectral_norm=True, style_dim=8, act="relu", n_layers=3, padding_mode="zeros", use_IN_in_style=True):
         super().__init__()
 
         input_channels, input_height, input_width = img_size
+
+        #
+        # CONTENT ENCODER
+        #
 
         self.content_enc = [
             ConvBlock(input_channels, base_channels,
@@ -612,6 +595,10 @@ class MUNITEncoder(nn.Module):
         ]
 
         self.content_enc = nn.Sequential(*self.content_enc)
+
+        #
+        # STYLE ENCODER
+        #
 
         self.style_enc = [
             ConvBlock(input_channels, base_channels,
@@ -668,6 +655,8 @@ class MUNITEncoder(nn.Module):
 
 
 class ResNetGenerator(nn.Module):
+    """DCGAN Generator. Conv layers are replaced by residual blocks."""
+
     def __init__(self,
                  img_size=(3, 32, 64),
                  latent_dim=100,
@@ -753,13 +742,6 @@ class ResNetGenerator(nn.Module):
 
 class BasicGenerator(nn.Module):
     """Basic Generator. 
-
-    Parameters
-    ----------
-    img_size : list or tuple
-        Input image size (input_channels, input_height, input_width)
-    latent_dim : int
-        Latent dimension, by default 100
 
     References
     ----------

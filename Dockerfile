@@ -28,6 +28,8 @@ RUN apt-get update \
 RUN mkdir /app
 WORKDIR /app
 
+COPY requirements.txt app/requirements.txt
+
 # Create a non-root user and switch to it
 RUN adduser --disabled-password --gecos '' --shell /bin/bash user \
     && chown -R user:user /app
@@ -48,20 +50,7 @@ RUN curl -sLo ~/miniconda.sh https://repo.continuum.io/miniconda/Miniconda3-py38
     && conda install -y python==3.8.1 \
     && conda clean -ya
 
-# CUDA 10.2-specific steps
-# RUN conda install -y conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch \
-#     && conda clean -ya
-RUN pip install torch torchvision torchaudio torchsummary
-
-RUN conda install --yes \
-    jupyter \
-    matplotlib \
-    scikit-learn \
-    scikit-image \
-    && conda clean -ya
-
-RUN pip install opencv-python shapely line_profiler pytorch-lightning
-RUN pip install -U git+git://github.com/lilohuang/PyTurboJPEG.git
+RUN pip install -r requirements.txt
 
 # Set the default command to bash
 CMD ["bash"]

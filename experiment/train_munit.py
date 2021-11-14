@@ -12,7 +12,6 @@ from scripts.utility import *
 from scripts.dataloader import *
 from scripts.callbacks import *
 
-# pl.utilities.seed.seed_everything(seed=0)
 
 # POTSDAM CARS
 generator_params = {"n_layers": 4,
@@ -108,6 +107,7 @@ try:
 except KeyboardInterrupt:
     pass
 
+
 file_name = os.path.basename(__file__)
-copyfile(file_name,
+copyfile(os.path.join("experiment", file_name),
          os.path.join(results_dir, file_name))

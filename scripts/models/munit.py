@@ -16,13 +16,7 @@ from .networks import *
 
 
 class MUNIT(pl.LightningModule):
-    """My Gan module because I find ``pl_bolts`` implementation confusing.
-    It is based on https://lightning-bolts.readthedocs.io/en/latest/gans.html#basic-gan
-
-    Parameters
-    ----------
-
-    """
+    """My MUNIT implementation."""
 
     def __init__(self,
                  img_dim=(3, 32, 64),
@@ -66,7 +60,7 @@ class MUNIT(pl.LightningModule):
 
         self.criterion = L2Norm()
 
-        if use_lpips or self.generator.my_loss:
+        if use_lpips:
             self.lpips = lpips.LPIPS(net='vgg')
 
         # ingerating FID score
@@ -115,7 +109,7 @@ class MUNIT(pl.LightningModule):
                 self.act_real = np.concatenate(
                     (self.act_real, act), axis=0) if len(self.act_real) > 0 else act
 
-            # append fake images or noise vectors for FID
+            # append fake images for FID
             if len(self.gen_input) < self.n_samples:
                 self.gen_input = th.cat((self.gen_input, fake), dim=0) if len(
                     self.gen_input) > 0 else fake
@@ -142,17 +136,6 @@ class MUNIT(pl.LightningModule):
 
             # Random Real Reconstruction
             ret = self.generator(fake, real)[0]
-            # if self.generator.my_loss:
-            #     x11_, x22_ = ret[2:]
-            #     real_random_ret1 = self.discriminator(x11_.detach(), 0)
-            #     real_random_loss1 = compute_loss(
-            #         real_random_ret1, 1, self.criterion)
-
-            #     real_random_ret2 = self.discriminator(x22_.detach(), 1)
-            #     real_random_loss2 = compute_loss(
-            #         real_random_ret2, 1, self.criterion)
-
-            #     real_loss += real_random_loss1 + real_random_loss2
 
             # Fake Loss
             x12, x21 = ret[:2]
@@ -174,9 +157,6 @@ class MUNIT(pl.LightningModule):
             self.log("loss/disc_fake_1", fake_loss1)
             self.log("loss/disc_real_2", real_loss2)
             self.log("loss/disc_fake_2", fake_loss2)
-            # if self.generator.my_loss:
-            #     self.log("loss/disc_real_random_1", real_random_loss1)
-            #     self.log("loss/disc_real_random_2", real_random_loss2)
 
         # GENERATOR
         if optimizer_idx == 1:
@@ -213,34 +193,11 @@ class MUNIT(pl.LightningModule):
 
             gen_loss = fake_loss1 + fake_loss2
 
-            # Random Reconstruction Loss
-            my_loss = 0
-            if self.generator.my_loss:
-                x11_, x22_ = ret[0][2:]
-
-                # realistic looking
-                real_random_ret1 = self.discriminator(x11_, 0)
-                real_random_loss1 = compute_loss(
-                    real_random_ret1, 1, self.criterion)
-
-                real_random_ret2 = self.discriminator(x22_, 1)
-                real_random_loss2 = compute_loss(
-                    real_random_ret2, 1, self.criterion)
-
-                # similar to the original image
-                my_loss_lpips = th.mean(self.lpips(fake,
-                                                   x11_, normalize=True))
-                my_loss_lpips += th.mean(self.lpips(real,
-                                                    x22_, normalize=True))
-
-                my_loss += real_random_loss1 + real_random_loss2 + my_loss_lpips
-
             # Total Loss
             result = self.hparams.l0 * gen_loss + self.hparams.l1 * loss_rec + \
                 self.hparams.l2 * loss_s + self.hparams.l3 * \
                 loss_c + self.hparams.l4 * loss_cyc + \
-                self.hparams.gamma * symmetry_loss + self.hparams.alpha * lpips_loss + \
-                my_loss
+                self.hparams.gamma * symmetry_loss + self.hparams.alpha * lpips_loss
 
             # Logging
             self.log("loss/adv_loss", self.hparams.l0 * gen_loss)
@@ -256,10 +213,6 @@ class MUNIT(pl.LightningModule):
             if self.hparams.use_lpips:
                 self.log("loss/gen_lpips_loss",
                          self.hparams.alpha * lpips_loss)
-            if self.generator.my_loss:
-                self.log("loss/gen_my_loss_lpips", my_loss_lpips)
-                self.log("loss/gen_my_loss_1", real_random_loss1)
-                self.log("loss/gen_my_loss_2", real_random_loss2)
 
         return result
 
