@@ -11,22 +11,19 @@ from scripts.utility import *
 from scripts.dataloader import *
 from scripts.callbacks import *
 
-# POTSDAM CARS
+# EXPERIMENTS
+# --------------
+# version 0: (D) Reduced dataset
+
 generator_param = {"n_layers": 4,
                    "init_channels": 512,
                    "bn_mode": "default",
                    "act": "leakyrelu",
                    "last_layer_kernel_size": 3}
-discriminator_params = [{"base_channels": 64,
-                        "n_layers": 4,
-                         "bn_mode": "default"},
-                        {"base_channels": 64,
-                         "padding_mode": "reflect",
-                         "n_layers": 4,
-                         "bn_mode": "default"}]
+discriminator_param = {"base_channels": 64,
+                       "n_layers": 4,
+                       "bn_mode": "default"}
 
-use_weight_decay = [False, True]
-use_lr_scheduler = [False, False]
 
 img_dim = (3, 32, 64)
 batch_size = 64
@@ -49,43 +46,40 @@ transform = transforms.Compose([transforms.Resize(img_dim[1:]),
                                     hue=[-0.1, 0.1], contrast=[1, 1.25]),
                                 transforms.Normalize([0.5], [0.5])])
 
-for discriminator_param, use_weight_decay, use_lr_scheduler in zip(discriminator_params, use_weight_decay, use_lr_scheduler):
 
-    model = GAN(img_dim,
-                discriminator_params=discriminator_param,
-                disc_model="basic",
-                generator_params=generator_param,
-                gen_model="basic",
-                fid_interval=-1,
-                use_lr_scheduler=use_lr_scheduler,
-                weight_decay_gen=1e-3 if use_weight_decay else 0,
-                weight_decay_disc=1e-3 if use_weight_decay else 0)
+model = GAN(img_dim,
+            discriminator_params=discriminator_param,
+            disc_model="basic",
+            generator_params=generator_param,
+            gen_model="basic",
+            fid_interval=-1,
+            use_lr_scheduler=False)
 
-    potsdam = PostdamCarsDataModule(data_dir,
-                                    img_size=img_dim[1:],
-                                    batch_size=batch_size,
-                                    transform=transform)
-    potsdam.setup()
+potsdam = PostdamCarsDataModule(data_dir,
+                                img_size=img_dim[1:],
+                                batch_size=batch_size,
+                                transform=transform)
+potsdam.setup()
 
-    callbacks = [
-        TensorboardGeneratorSampler(
-            epoch_interval=interval, num_samples=batch_size, normalize=True),
-        LatentDimInterpolator(
-            interpolate_epoch_interval=interval, num_samples=10),
-        ShowWeights(),
-        ModelCheckpoint(period=interval, save_top_k=-1, filename="{epoch}"),
-    ]
+callbacks = [
+    TensorboardGeneratorSampler(
+        epoch_interval=interval, num_samples=batch_size, normalize=True),
+    LatentDimInterpolator(
+        interpolate_epoch_interval=interval, num_samples=10),
+    ShowWeights(),
+    ModelCheckpoint(period=interval, save_top_k=-1, filename="{epoch}"),
+]
 
-    # Apparently Trainer has logger by default
-    trainer = pl.Trainer(default_root_dir=results_dir,
-                         gpus=1,
-                         max_epochs=max_epochs,
-                         callbacks=callbacks,
-                         progress_bar_refresh_rate=20)
-    try:
-        trainer.fit(model, datamodule=potsdam)
-    except KeyboardInterrupt:
-        pass
+# Apparently Trainer has logger by default
+trainer = pl.Trainer(default_root_dir=results_dir,
+                     gpus=1,
+                     max_epochs=max_epochs,
+                     callbacks=callbacks,
+                     progress_bar_refresh_rate=20)
+try:
+    trainer.fit(model, datamodule=potsdam)
+except KeyboardInterrupt:
+    pass
 
 file_name = os.path.basename(__file__)
 copyfile(os.path.join("experiment", file_name),

@@ -12,8 +12,10 @@ from scripts.utility import *
 from scripts.dataloader import *
 from scripts.callbacks import *
 
+# EXPERIMENTS
+# --------------------------------
+# version 0: (E) MUNIT All Dataset
 
-# POTSDAM CARS
 generator_params = {"n_layers": 4,
                     "base_channels": 32,
                     "padding_mode": "reflect",

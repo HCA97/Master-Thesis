@@ -15,16 +15,17 @@ import numpy as np
 
 from scripts import *
 
-
-save_path = "experiments/munit_version_2_larger_image_corrected_500/version_0/10000_cars_cropped_truncated"
+# LIMITED DATA
+save_path = "experiments/munit_version_2_larger_image_corrected_500/version_0/10000_cars_cropped"
 path = "experiments/munit_version_2_larger_image_corrected_500/lightning_logs/version_0/checkpoints/epoch=499.ckpt"
 artificial_dir = "../potsdam_data/cem-v0/v2/training_tightcanvas_graybackground"
-idx = 0  # 6
+idx = 0  # layer index to crop cars
 
-# save_path = "experiments/munit_version_2_larger_image_corrected/version_1/10000_cars_cropped_truncated"
-# path = "experiments/munit_version_2_larger_image_corrected_500/lightning_logs/version_0/checkpoints/epoch=899.ckpt"
+# ALL DATA
+# save_path = "experiments/munit_version_2_larger_image_corrected/version_1/10000_cars_cropped"
+# path = "experiments/munit_version_2_larger_image_corrected/lightning_logs/version_0/checkpoints/epoch=899.ckpt"
 # artificial_dir = "../potsdam_data/cem-v0/v2/training_tightcanvas_graybackground"
-# idx = 6
+# idx = 6 # layer index to crop cars
 
 img_dim = (3, 40, 80)
 n_samples = 1000
@@ -82,7 +83,7 @@ with th.no_grad():
 
         _, img_fake = next(iter(dataloader))
         img_contents = img_fake.to(model.device)
-        random_styles = th.normal(0, 0.75, size=(
+        random_styles = th.normal(0, 1, size=(
             n_samples, model.generator.style_dim), device=model.device)
 
         contents, _ = enc1(img_contents)

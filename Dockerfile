@@ -50,7 +50,7 @@ RUN curl -sLo ~/miniconda.sh https://repo.continuum.io/miniconda/Miniconda3-py38
     && conda install -y python==3.8.1 \
     && conda clean -ya
 
-RUN pip install -r requirements.txt
+RUN pip install -r app/requirements.txt
 
 # Set the default command to bash
 CMD ["bash"]

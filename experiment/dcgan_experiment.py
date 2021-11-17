@@ -11,35 +11,48 @@ from scripts.utility import *
 from scripts.dataloader import *
 from scripts.callbacks import *
 
-# POTSDAM CARS
-generator_params = [{"n_layers": 4,
-                     "init_channels": 512,
-                     "bn_mode": "default",
-                     "act": "leakyrelu",
-                     "last_layer_kernel_size": 3},
-                    {"n_layers": 4,
-                     "init_channels": 512,
-                     "padding_mode": "reflect",
-                     "bn_mode": "default",
-                     "act": "leakyrelu",
-                     "last_layer_kernel_size": 3},
-                    {"n_layers": 4,
-                     "init_channels": 512,
-                     "padding_mode": "reflect",
-                     "bn_mode": "default",
-                     "act": "leakyrelu",
-                     "last_layer_kernel_size": 3}]
-discriminator_params = [{"base_channels": 64,
-                        "n_layers": 4,
-                         "bn_mode": "default"},
-                        {"base_channels": 64,
-                         "padding_mode": "reflect",
-                         "n_layers": 4,
-                         "bn_mode": "default"},
-                        {"base_channels": 64,
-                         "padding_mode": "reflect",
-                         "n_layers": 4,
-                         "bn_mode": "default"}]
+# EXPERIMENTS
+# --------------------------------
+# version 0: (A) baseline
+# version 1: (B) + padding reflect
+# version 2: (C) + lr scheduler
+
+generator_params = [
+    # padding zero
+    {"n_layers": 4,
+     "init_channels": 512,
+     "bn_mode": "default",
+     "act": "leakyrelu",
+     "last_layer_kernel_size": 3},
+    # padding reflect
+    {"n_layers": 4,
+     "init_channels": 512,
+     "padding_mode": "reflect",
+     "bn_mode": "default",
+     "act": "leakyrelu",
+     "last_layer_kernel_size": 3},
+    {"n_layers": 4,
+     "init_channels": 512,
+     "padding_mode": "reflect",
+     "bn_mode": "default",
+     "act": "leakyrelu",
+     "last_layer_kernel_size": 3}
+]
+discriminator_params = [
+    # padding zero
+    {"base_channels": 64,
+     "n_layers": 4,
+     "bn_mode": "default"},
+    # padding reflect
+    {"base_channels": 64,
+     "padding_mode": "reflect",
+     "n_layers": 4,
+     "bn_mode": "default"},
+    {"base_channels": 64,
+     "padding_mode": "reflect",
+     "n_layers": 4,
+     "bn_mode": "default"}
+]
 
 use_lr_schedulers = [False, False, True]
 
